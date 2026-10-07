@@ -274,7 +274,7 @@ Read these before every session.
   - `FxToolkit` (test) also accepts `WAYLAND_DISPLAY`, and offers `flush()` to wait for queued JavaFX work.
   - Headless smoke runs (step 1.6) cannot use `FxController` because it needs the toolkit. Use a toolkit-free controller there.
 
-- [ ] **1.6 Headless smoke: list a local directory through the core**
+- [x] **1.6 Headless smoke: list a local directory through the core**
 
   **Do**
   - `Smoke.java`: `--smoke list <directory>`. Builds
@@ -293,6 +293,14 @@ Read these before every session.
   ```
 
   **Commit**: `Add headless smoke test listing a local directory.`
+
+  **Done (executor notes)**
+  - Uses `HeadlessController` (runs main actions on the calling thread, like the CLI's `TerminalController`) because
+    `FxController` needs the toolkit. `MainApplication` calls `System.exit(Smoke.run(...))` for `--smoke`, since the core keeps
+    non-daemon threads alive. A daemon watchdog halts the JVM with `SMOKE FAIL timeout` after 120 s.
+  - Checked that the test can fail: a missing directory prints `SMOKE FAIL ...` and exits 1, an unknown mode exits 1, and the
+    count follows the directory (4 files give `SMOKE OK list 4`, an empty directory gives `SMOKE OK list 0`).
+  - `smoke.sh` has a `smoke <pattern> <mode> <args...>` helper. Later steps add one line per mode.
 
 ---
 
