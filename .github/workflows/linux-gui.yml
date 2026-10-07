@@ -1,0 +1,52 @@
+name: Linux GUI
+
+on:
+  push:
+    branches:
+      - master
+      - 'dom/**'
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The build number is the number of commits
+          fetch-depth: 0
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: 25
+          cache: maven
+      - name: Install libraries for JavaFX and a virtual display
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libgtk-3-0t64 libgl1 libxtst6
+      - name: Build the modules the Linux GUI depends on
+        run: >-
+          mvn --no-transfer-progress --batch-mode install
+          -DskipTests -DskipITs -DskipSign -Drevision=0
+          --also-make --projects i18n,profiles,linux
+        env:
+          SKIP_SIGN: true
+      - name: Test the Linux GUI
+        run: xvfb-run -a mvn --no-transfer-progress --batch-mode verify -DskipITs -DskipSign -Drevision=0 --projects linux
+        env:
+          SKIP_SIGN: true
+      - name: Run the smoke tests
+        run: xvfb-run -a linux/smoke.sh
+      - name: Archive test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-gui-test-reports
+          path: linux/target/surefire-reports/
+          if-no-files-found: ignore
