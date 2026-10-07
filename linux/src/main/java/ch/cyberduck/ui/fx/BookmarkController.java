@@ -53,9 +53,9 @@ public class BookmarkController {
 
     private final ObservableList<Host> items = FXCollections.observableArrayList();
     private final ListView<Host> list = new ListView<>(items);
-    private final Button add = new Button("Add");
-    private final Button edit = new Button("Edit");
-    private final Button delete = new Button("Delete");
+    private final Button add = new Button(Messages.get("Add"));
+    private final Button edit = new Button(Messages.get("Edit"));
+    private final Button delete = new Button(Messages.get("Delete"));
     private final BorderPane pane = new BorderPane();
 
     private ConnectionDialog dialog;
@@ -91,7 +91,7 @@ public class BookmarkController {
         this.dialogs = dialogs;
 
         list.setCellFactory(view -> new BookmarkCell());
-        list.setPlaceholder(new Label("No bookmarks"));
+        list.setPlaceholder(new Label(Messages.get("No bookmarks")));
         list.setOnMouseClicked(event -> {
             if(event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
                 this.connect();

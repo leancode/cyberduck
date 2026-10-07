@@ -76,7 +76,7 @@ public class ConnectionDialog extends Dialog<Host> {
     public ConnectionDialog(final Window owner, final ProtocolFactory protocols, final boolean bookmark, final Host initial) {
         this.protocols = protocols;
         this.bookmark = bookmark;
-        this.connect = new ButtonType(bookmark ? "Save" : "Connect", ButtonBar.ButtonData.OK_DONE);
+        this.connect = new ButtonType(Messages.get(bookmark ? "Save" : "Connect"), ButtonBar.ButtonData.OK_DONE);
         this.initOwner(owner);
         this.setTitle(bookmark ? (null == initial ? "New Bookmark" : "Edit Bookmark") : "Open Connection");
         this.getDialogPane().getButtonTypes().addAll(connect, ButtonType.CANCEL);
@@ -142,17 +142,17 @@ public class ConnectionDialog extends Dialog<Host> {
         int row = 0;
         if(bookmark) {
             nickname.setPromptText("Name of the bookmark");
-            grid.addRow(row++, new Label("Name"), nickname);
+            grid.addRow(row++, new Label(Messages.get("Name")), nickname);
         }
-        grid.addRow(row++, new Label("Protocol"), protocol);
-        grid.addRow(row++, new Label("Server"), server);
-        grid.addRow(row++, new Label("Port"), port);
-        grid.addRow(row++, new Label("Username"), username);
+        grid.addRow(row++, new Label(Messages.get("Protocol")), protocol);
+        grid.addRow(row++, new Label(Messages.get("Server")), server);
+        grid.addRow(row++, new Label(Messages.get("Port")), port);
+        grid.addRow(row++, new Label(Messages.get("Username")), username);
         if(!bookmark) {
             // A bookmark stores no password
-            grid.addRow(row++, new Label("Password"), password);
+            grid.addRow(row++, new Label(Messages.get("Password")), password);
         }
-        grid.addRow(row++, new Label("Path"), path);
+        grid.addRow(row++, new Label(Messages.get("Path")), path);
         error.setStyle("-fx-text-fill: red;");
         error.setWrapText(true);
         grid.add(error, 0, row, 2, 1);

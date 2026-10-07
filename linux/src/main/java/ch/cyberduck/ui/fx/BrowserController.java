@@ -107,6 +107,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.stage.FileChooser;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 
 /**
@@ -132,17 +133,17 @@ public class BrowserController extends FxController {
     private final TableView<Path> table = new TableView<>();
     private final ObservableList<Path> rows = FXCollections.observableArrayList();
     private final Label status = new Label();
-    private final ToggleButton bookmarksToggle = new ToggleButton("Bookmarks");
-    private final Button connect = new Button("Connect");
-    private final Button back = new Button("Back");
-    private final Button up = new Button("Up");
-    private final Button refresh = new Button("Refresh");
-    private final Button download = new Button("Download");
-    private final Button upload = new Button("Upload");
-    private final Button transfers = new Button("Transfers");
-    private final Button newFolder = new Button("New Folder");
-    private final Button rename = new Button("Rename");
-    private final Button delete = new Button("Delete");
+    private final ToggleButton bookmarksToggle = new ToggleButton(Messages.get("Bookmarks"));
+    private final Button connect = new Button(Messages.get("Connect"));
+    private final Button back = new Button(Messages.get("Back"));
+    private final Button up = new Button(Messages.get("Up"));
+    private final Button refresh = new Button(Messages.get("Refresh"));
+    private final Button download = new Button(Messages.get("Download"));
+    private final Button upload = new Button(Messages.get("Upload"));
+    private final Button transfers = new Button(Messages.get("Transfers"));
+    private final Button newFolder = new Button(Messages.get("New Folder"));
+    private final Button rename = new Button(Messages.get("Rename"));
+    private final Button delete = new Button(Messages.get("Delete"));
     private final StringProperty summary = new SimpleStringProperty(StringUtils.EMPTY);
 
     private final Cache<Path> cache = new PathCache(preferences.getInteger("browser.cache.size"));
@@ -220,7 +221,8 @@ public class BrowserController extends FxController {
         }
         location.setPrefWidth(160);
         location.setMinWidth(80);
-        stage.setOnShown(event -> stage.setMinWidth(top.minWidth(-1) + stage.getWidth() - stage.getScene().getWidth()));
+        stage.setOnShown(event -> stage.setMinWidth(Math.min(
+            top.minWidth(-1) + stage.getWidth() - stage.getScene().getWidth(), Screen.getPrimary().getVisualBounds().getWidth())));
 
         table.setItems(rows);
         table.setPlaceholder(new Label());
@@ -284,7 +286,7 @@ public class BrowserController extends FxController {
 
     private TableColumn<Path, Path> column(final String title, final double width, final Comparator<Path> comparator,
                                            final Function<Path, String> text, final Pos alignment) {
-        final TableColumn<Path, Path> column = new TableColumn<>(title);
+        final TableColumn<Path, Path> column = new TableColumn<>(Messages.get(title));
         column.setPrefWidth(width);
         column.setComparator(comparator);
         column.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue()));
@@ -300,29 +302,29 @@ public class BrowserController extends FxController {
     }
 
     private MenuBar menu() {
-        final MenuItem newBrowser = new MenuItem("New Browser");
+        final MenuItem newBrowser = new MenuItem(Messages.get("New Browser"));
         newBrowser.setAccelerator(KeyCombination.keyCombination("Shortcut+N"));
         newBrowser.setOnAction(event -> MainController.get().newBrowser(null));
-        final MenuItem open = new MenuItem("Open Connection…");
+        final MenuItem open = new MenuItem(Messages.get("Open Connection…"));
         open.setAccelerator(KeyCombination.keyCombination("Shortcut+O"));
         open.setOnAction(event -> this.connect());
-        final MenuItem disconnect = new MenuItem("Disconnect");
+        final MenuItem disconnect = new MenuItem(Messages.get("Disconnect"));
         disconnect.setOnAction(event -> this.unmount(() -> {
             //
         }));
         disconnect.disableProperty().bind(Bindings.createBooleanBinding(() -> null == rendered, renderedProperty));
-        final MenuItem closeWindow = new MenuItem("Close Window");
+        final MenuItem closeWindow = new MenuItem(Messages.get("Close Window"));
         closeWindow.setAccelerator(KeyCombination.keyCombination("Shortcut+W"));
         closeWindow.setOnAction(event -> this.close());
-        final MenuItem quit = new MenuItem("Quit");
+        final MenuItem quit = new MenuItem(Messages.get("Quit"));
         quit.setAccelerator(KeyCombination.keyCombination("Shortcut+Q"));
         quit.setOnAction(event -> MainController.get().quit());
-        final MenuItem showTransfers = new MenuItem("Transfers");
+        final MenuItem showTransfers = new MenuItem(Messages.get("Transfers"));
         showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
         showTransfers.setOnAction(event -> TransferController.get().show());
         menu = new MenuBar(
-            new Menu("File", null, newBrowser, open, disconnect, new SeparatorMenuItem(), closeWindow, quit),
-            new Menu("Window", null, showTransfers));
+            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("Window"), null, showTransfers));
         return menu;
     }
 
@@ -354,6 +356,10 @@ public class BrowserController extends FxController {
 
     public Stage getStage() {
         return stage;
+    }
+
+    Button getRefresh() {
+        return refresh;
     }
 
     TableView<Path> getTable() {
@@ -699,7 +705,7 @@ public class BrowserController extends FxController {
             return;
         }
         final FileChooser chooser = new FileChooser();
-        chooser.setTitle("Upload");
+        chooser.setTitle(Messages.get("Upload"));
         final Local suggested = new UploadDirectoryFinder().find(pool.getHost());
         if(suggested.exists()) {
             chooser.setInitialDirectory(new File(suggested.getAbsolute()));

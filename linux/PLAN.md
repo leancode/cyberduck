@@ -1074,9 +1074,22 @@ later publishes packages.
   Finding: `linux/smoke.sh` pins its isolated home to the credentials file store, because a machine with `secret-tool`
   and a display starts a keyring that waits for a prompt and made the SFTP scenario time out. The check that quitting
   saves the preferences now compares the file before and after, since the pin creates the file.
-- [ ] **5.3 Localization**: `applicationLocales()` returns the `*.lproj` directories found next to
+- [x] **5.3 Localization**: `applicationLocales()` returns the `*.lproj` directories found next to
   the resources; `RegexLocale` already reads them. Proof: `LANG=de_DE.UTF-8 linux/run.sh --smoke list`
   prints a German toolbar label captured in the OK line.
+  **Executor note**: done. The translations were already unpacked next to the jars and `RegexLocale` follows the
+  language of the process. Two things were missing. The labels were English literals, so every label, menu entry,
+  column title, button of the dialogs and the file chooser title goes through `Messages.get`, which looks the English
+  text up in the tables that hold window and dialog labels (Localizable, Browser, Folder, Transfer, Credentials and
+  others) and shows the English text when none has it ("Up", "Add", "Back" and "Connect" are not translated in the
+  shared files yet). And the language of the session was only read from the locale of the process, which Java ignores
+  when that locale is not installed, so `Bootstrap.language` also reads the gettext variable `LANGUAGE` (`de`,
+  `xx:fr:de`, `pt_BR`) and takes the first language with a `.lproj` folder. Proof: 5 tests in `MessagesTest`
+  (German, French, English, untranslated text, parsing of `LANGUAGE`) and three smoke runs of the new `locale` mode:
+  no variable prints `refresh=Refresh`, `LANGUAGE=de` prints `refresh=Aktualisieren`, `LANGUAGE=xx:fr:de` prints
+  `refresh=Actualiser`. A screenshot in German shows the toolbar, menu and columns translated and nothing cut off. The
+  window's minimum width follows the toolbar but never exceeds the screen. `smoke.sh` now pins `LC_ALL=C.UTF-8` and
+  unsets `LANGUAGE` so that a developer's own language does not break the English checks.
 - [ ] **5.4 Preferences window**: General (download folder, default protocol), Transfers (concurrent
   transfers, overwrite policy), Connection (timeout, proxy). Proof: change a value, restart, value
   persisted (`cyberduck.properties` diff).
