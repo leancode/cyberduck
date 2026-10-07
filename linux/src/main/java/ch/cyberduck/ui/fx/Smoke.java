@@ -30,6 +30,8 @@ import ch.cyberduck.core.threading.SessionBackgroundAction;
 import ch.cyberduck.core.threading.WorkerBackgroundAction;
 import ch.cyberduck.core.worker.ListWorker;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.util.EnumSet;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -41,9 +43,11 @@ import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.event.Event;
 import javafx.scene.Node;
+import javafx.scene.control.DialogPane;
 import javafx.scene.control.TableRow;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
+import javafx.stage.Window;
 
 /**
  * Scripted scenarios run against the local filesystem without a server. Started with
@@ -89,6 +93,9 @@ public final class Smoke {
                 case "connect":
                     System.out.printf("SMOKE OK connect %d%n", connect(browser, arguments.get(1)));
                     hold();
+                    return 0;
+                case "connect-fail":
+                    System.out.printf("SMOKE OK connect-fail %s%n", connectFail(browser));
                     return 0;
                 case "navigate":
                     navigate(browser, arguments.get(1));
@@ -179,6 +186,50 @@ public final class Smoke {
         return onFx(() -> browser.getTable().getItems().size());
     }
 
+    /**
+     * Connect to a port nobody listens on. The failure must reach the user as a dialog and leave the browser
+     * disconnected, not hang.
+     *
+     * @return Title of the error dialog
+     */
+    static String connectFail(final BrowserController browser) throws Exception {
+        final Host host = HostBuilder.fromUrl(ProtocolFactory.get(), "sftp://user@127.0.0.1:1/");
+        onFx(() -> {
+            browser.mount(host);
+            return null;
+        });
+        await("error dialog", () -> onFx(() -> null != dialog()));
+        final String title = onFx(() -> dialog().getHeaderText());
+        final String message = onFx(() -> dialog().getContentText());
+        System.out.printf("Error dialog: %s | %s%n", title, message);
+        check("error dialog has a title", StringUtils.isNotBlank(title));
+        closeDialog();
+        await("disconnected", () -> onFx(() -> !browser.isMounted() && null == browser.getRendered()));
+        return title;
+    }
+
+    /**
+     * Close the dialog that is showing like pressing its close button
+     */
+    private static void closeDialog() throws Exception {
+        onFx(() -> {
+            dialog().getScene().getWindow().hide();
+            return null;
+        });
+    }
+
+    /**
+     * @return The dialog that is showing or null
+     */
+    private static DialogPane dialog() {
+        for(Window window : Window.getWindows()) {
+            if(window.isShowing() && window.getScene() != null && window.getScene().getRoot() instanceof DialogPane pane) {
+                return pane;
+            }
+        }
+        return null;
+    }
+
     static void awaitRendered(final BrowserController browser, final String directory) throws Exception {
         await(String.format("directory %s shown", directory), () -> onFx(() -> null != browser.getRendered() && directory.equals(browser.getRendered().getAbsolute())));
     }
@@ -248,6 +299,10 @@ public final class Smoke {
             browser.getLocation().fireEvent(new ActionEvent());
             return null;
         });
+        // The failure is shown to the user and has to be acknowledged
+        await("error dialog", () -> onFx(() -> null != dialog()));
+        System.out.printf("Error dialog: %s%n", onFx(() -> dialog().getHeaderText()));
+        closeDialog();
         await("location restored after failed listing", () -> onFx(() -> directory.equals(browser.getLocation().getText())));
         check("directory still shown after failed listing", directory.equals(onFx(() -> browser.getRendered().getAbsolute())));
     }
