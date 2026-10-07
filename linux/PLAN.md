@@ -492,7 +492,7 @@ of a hang on failure.
     rate limited) and `docker pull mirror.gcr.io/atmoz/sftp:alpine && docker tag mirror.gcr.io/atmoz/sftp:alpine atmoz/sftp:alpine`
     because Docker Hub answered `429 Too Many Requests`. GitHub-hosted runners do not need any of this.
 
-- [ ] **2.6 Bookmarks**
+- [x] **2.6 Bookmarks**
 
   **Do**
   - `BookmarkController`: a `ListView<Host>` bound to `BookmarkCollection.defaultCollection()`
@@ -511,6 +511,20 @@ of a hang on failure.
   ```
 
   **Commit**: `Add bookmark list and editing.`
+
+  **Done (executor notes)**
+  - `BookmarkCollection(Local)` is the constructor to use in tests (there is no `FolderBookmarkCollection`). The reader looks the
+    protocol up in the global `ProtocolFactory`, so `BookmarkPersistenceTest` registers an enabled `SFTPProtocol` there.
+    4 tests: save and load, change, remove deletes the file, and the password is never written to the bookmark file.
+  - `ConnectionDialog` has a bookmark mode (name field, no password, button `Save`, prefilled values for editing).
+    `HostBuilder.copy` applies the edited values to the existing bookmark so its UUID and file stay the same.
+  - `BookmarkController` listens to the collection and rebuilds its list on the JavaFX thread. The browser has a Bookmarks toggle
+    that shows or hides the pane. Double click mounts the bookmark itself (as macOS does), so the core updates its timestamp.
+  - Java ignores the `HOME` variable, so `LinuxApplicationPreferences.userHome()` prefers it. This lets `smoke.sh` run with a
+    throw-away `HOME` and never touch the real `~/.duck`. Preferences, bookmarks and logs all follow it.
+  - Smoke `bookmarks` adds a bookmark through the dialog, checks the `.duck` file, opens it with a real double-click event,
+    edits the name, checks the file content, deletes after confirmation and checks the file is gone.
+  - Passwords are not stored yet. Saving them needs the keychain step in Phase 5, so every connect asks for the password.
 
 - [ ] **2.7 Download with overwrite prompt**
 

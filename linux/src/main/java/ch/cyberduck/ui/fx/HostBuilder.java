@@ -84,4 +84,19 @@ public final class HostBuilder {
         }
         return host;
     }
+
+    /**
+     * Copy the values a user can edit in the dialog, keeping the identity of the target bookmark
+     *
+     * @param from Edited values
+     * @param to   Bookmark to change
+     */
+    public static void copy(final Host from, final Host to) {
+        to.setProtocol(from.getProtocol());
+        to.setHostname(from.getHostname());
+        to.setPort(from.getPort());
+        to.setDefaultPath(from.getDefaultPath());
+        to.setNickname(from.getNickname());
+        to.getCredentials().setUsername(from.getCredentials().getUsername());
+    }
 }

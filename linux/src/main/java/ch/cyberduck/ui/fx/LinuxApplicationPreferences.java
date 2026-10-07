@@ -25,6 +25,7 @@ import ch.cyberduck.core.preferences.DefaultPreferences;
 import ch.cyberduck.core.preferences.UserHomeSupportDirectoryFinder;
 import ch.cyberduck.core.proxy.EnvironmentVariableProxyFinder;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,7 +70,21 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
      * @return {@code ~/.duck/cyberduck.properties}
      */
     public static Path defaultFile() {
-        return Paths.get(System.getProperty("user.home"), ".duck", "cyberduck.properties");
+        return Paths.get(userHome(), ".duck", "cyberduck.properties");
+    }
+
+    /**
+     * Java ignores the {@code HOME} environment variable and reads the home folder from the user database. Prefer the
+     * variable because it is how a desktop session, a container or a test run selects the home folder.
+     *
+     * @return Home folder of the user
+     */
+    public static String userHome() {
+        final String home = System.getenv("HOME");
+        if(StringUtils.isNotBlank(home) && Files.isDirectory(Paths.get(home))) {
+            return home;
+        }
+        return System.getProperty("user.home");
     }
 
     public Path getFile() {
@@ -131,6 +146,7 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
     protected void setDefaults() {
         super.setDefaults();
 
+        this.setDefault("local.user.home", userHome());
         // Same folder name as the bundled profiles unpacked next to the application resources
         this.setDefault("profiles.folder.name", "profiles");
         this.setDefault("ssh.authentication.agent.enable", String.valueOf(false));

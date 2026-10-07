@@ -94,6 +94,11 @@ public final class Smoke {
                     System.out.printf("SMOKE OK connect %d%n", connect(browser, arguments.get(1)));
                     hold();
                     return 0;
+                case "bookmarks":
+                    bookmarks(browser, arguments.get(1));
+                    System.out.println("SMOKE OK bookmarks");
+                    hold();
+                    return 0;
                 case "connect-fail":
                     System.out.printf("SMOKE OK connect-fail %s%n", connectFail(browser));
                     return 0;
@@ -184,6 +189,89 @@ public final class Smoke {
         });
         awaitRendered(browser, directory);
         return onFx(() -> browser.getTable().getItems().size());
+    }
+
+    /**
+     * Create, open, change and delete a bookmark through the bookmark pane and check the file in the home folder.
+     * Run with an empty home folder, as the smoke script does.
+     */
+    static void bookmarks(final BrowserController browser, final String directory) throws Exception {
+        final BookmarkController controller = browser.getBookmarks();
+        check("no bookmarks to start with", 0 == onFx(() -> controller.getList().getItems().size()));
+        final java.nio.file.Path folder = java.nio.file.Paths.get(LinuxApplicationPreferences.userHome(), ".duck", "Bookmarks");
+
+        // Add
+        onFx(() -> {
+            Platform.runLater(controller::add);
+            return null;
+        });
+        await("bookmark dialog", () -> onFx(() -> null != controller.getDialog() && controller.getDialog().isShowing()));
+        onFx(() -> {
+            final ConnectionDialog dialog = controller.getDialog();
+            dialog.getNicknameField().setText("Local test");
+            dialog.getProtocolBox().setValue(ProtocolFactory.get().forName("file"));
+            dialog.getPathField().setText(directory);
+            dialog.getConnectButton().fire();
+            return null;
+        });
+        await("bookmark listed", () -> onFx(() -> 1 == controller.getList().getItems().size()));
+        final Host bookmark = onFx(() -> controller.getList().getItems().get(0));
+        check("name", "Local test".equals(bookmark.getNickname()));
+        final java.nio.file.Path file = folder.resolve(String.format("%s.duck", bookmark.getUuid()));
+        await("bookmark file written", () -> java.nio.file.Files.exists(file));
+
+        // Open with a double click on the row
+        await("bookmark row", () -> onFx(() -> null != bookmarkRow(controller, bookmark)));
+        onFx(() -> {
+            final javafx.scene.control.ListCell<?> cell = bookmarkRow(controller, bookmark);
+            controller.getList().getSelectionModel().select(bookmark);
+            Event.fireEvent(cell, new MouseEvent(MouseEvent.MOUSE_CLICKED, 1, 1, 1, 1, MouseButton.PRIMARY, 2,
+                false, false, false, false, true, false, false, true, false, false, null));
+            return null;
+        });
+        awaitRendered(browser, directory);
+
+        // Edit
+        onFx(() -> {
+            controller.getList().getSelectionModel().select(bookmark);
+            Platform.runLater(controller::edit);
+            return null;
+        });
+        await("edit dialog", () -> onFx(() -> null != controller.getDialog() && controller.getDialog().isShowing()));
+        check("edit starts with the saved name", "Local test".equals(onFx(() -> controller.getDialog().getNicknameField().getText())));
+        onFx(() -> {
+            controller.getDialog().getNicknameField().setText("Renamed");
+            controller.getDialog().getConnectButton().fire();
+            return null;
+        });
+        await("name saved", () -> new String(java.nio.file.Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8).contains("Renamed"));
+        check("same bookmark", bookmark.getUuid().equals(onFx(() -> controller.getList().getItems().get(0).getUuid())));
+
+        hold();
+
+        // Delete after confirmation
+        onFx(() -> {
+            controller.getList().getSelectionModel().select(bookmark);
+            Platform.runLater(controller::delete);
+            return null;
+        });
+        await("confirmation", () -> onFx(() -> null != dialog()));
+        onFx(() -> {
+            final DialogPane pane = dialog();
+            ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
+            return null;
+        });
+        await("bookmark removed", () -> onFx(() -> controller.getList().getItems().isEmpty()));
+        await("bookmark file removed", () -> !java.nio.file.Files.exists(file));
+    }
+
+    private static javafx.scene.control.ListCell<?> bookmarkRow(final BookmarkController controller, final Host bookmark) {
+        for(Node node : controller.getList().lookupAll(".list-cell")) {
+            if(node instanceof javafx.scene.control.ListCell<?> cell && !cell.isEmpty() && bookmark.equals(cell.getItem())) {
+                return cell;
+            }
+        }
+        return null;
     }
 
     /**
