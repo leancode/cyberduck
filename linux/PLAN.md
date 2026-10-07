@@ -807,7 +807,7 @@ later publishes packages.
 
 ## Phase 4: `.deb` and `.rpm` packages
 
-- [ ] **4.1 jpackage app-image**
+- [x] **4.1 jpackage app-image**
 
   **Do**
   - Create `linux/build.xml` from `cli/linux/build.xml`. Changes: `app.name` = `Cyberduck`,
@@ -835,6 +835,19 @@ later publishes packages.
   ```
 
   **Commit**: `Build Linux app image with jpackage.`
+
+  **Done (executor notes)**
+  - `maven-antrun-plugin` in the `linux` profile runs `build.xml` in the `package` phase, because the jpackage input needs the jar
+    of this module itself. The parent's `run-ant-target` execution (compile phase) is switched off with `<phase>none</phase>`.
+  - The i18n jar also holds the macOS interface files. `unpack-i18n` takes only `*.lproj/*.strings` and `*.strings.1`
+    into `linux/target`, next to the profiles, so `LinuxApplicationResourcesFinder` finds both.
+  - The plan's jar copy would also copy `linux-*-sources.jar`, so it is excluded. The classifier jars of JavaFX end up as
+    `javafx-graphics-25.0.4.jar` and it does contain `libglass.so`, which the proof checks.
+  - Proof output on 2026-10-07: `Cyberduck --version` prints `Cyberduck 9.6.0-SNAPSHOT`, 24 profiles, 38 `*.lproj` folders, one
+    `libglass.so` in the JavaFX graphics jar, and `xvfb-run -a bin/Cyberduck --smoke list <dir>` prints `SMOKE OK list 2` with the
+    bundled runtime. The image is about 240 MB.
+  - JVM options of the launcher: `--enable-native-access=ALL-UNNAMED`, UTF-8, `-Djna.nounpack=true`, `-Djna.noclasspath=true` and
+    `-Djna.boot.library.path=$APPDIR` (jpackage replaces `$APPDIR`). These replace the preference entries of the CLI that did nothing.
 
 - [ ] **4.2 Desktop integration**
 

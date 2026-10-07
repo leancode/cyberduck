@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  ~ Copyright (c) 2002-2026 iterate GmbH. All rights reserved.
+  ~ https://cyberduck.io/
+  ~
+  ~ This program is free software; you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  -->
+<project name="Cyberduck Linux" basedir=".">
+
+    <import file="../build.xml"/>
+
+    <property name="app.name" value="Cyberduck"/>
+    <property name="app.icon" value="${home}/cyberduck-application.png"/>
+    <property name="license" value="${home}/LICENSE.txt"/>
+
+    <property name="build.input" value="${build}/package"/>
+    <property name="build.resources" value="${build}/resources"/>
+
+    <!-- Runs after the jar of this module has been built -->
+    <target name="build" depends="version">
+        <!-- jpackage does not overwrite. Packages first, the app image last because it is created in the same folder. -->
+        <delete dir="${build.input}"/>
+        <delete dir="${build.deploy}/${app.name}"/>
+        <delete>
+            <fileset dir="${build.deploy}" includes="*.deb,*.rpm"/>
+        </delete>
+        <mkdir dir="${build.input}"/>
+        <mkdir dir="${build.resources}"/>
+        <copy todir="${build.input}">
+            <fileset dir="${build}">
+                <include name="*.jar"/>
+                <exclude name="*-sources.jar"/>
+                <include name="*.so"/>
+                <include name="profiles/*.cyberduckprofile"/>
+                <include name="*.lproj/*"/>
+            </fileset>
+        </copy>
+        <antcall target="jpackage">
+            <param name="type" value="app-image"/>
+        </antcall>
+    </target>
+
+    <target name="jpackage">
+        <echo message="Create native ${type} bundle"/>
+        <exec executable="${java.home}/bin/jpackage" failonerror="true">
+            <arg value="--name"/>
+            <arg value="${app.name}"/>
+            <arg value="--input"/>
+            <arg value="${build.input}"/>
+            <arg value="--dest"/>
+            <arg value="${build.deploy}"/>
+            <arg value="--app-version"/>
+            <arg value="${version}.${revision}"/>
+            <arg value="--icon"/>
+            <arg value="${app.icon}"/>
+            <arg value="--java-options"/>
+            <arg value="--enable-native-access=ALL-UNNAMED"/>
+            <arg value="--java-options"/>
+            <arg value="-Djna.nounpack=true"/>
+            <arg value="--java-options"/>
+            <arg value="-Djna.noclasspath=true"/>
+            <arg value="--java-options"/>
+            <!-- Replaced by jpackage with the folder of the application files -->
+            <arg value="-Djna.boot.library.path=$APPDIR"/>
+            <arg value="--java-options"/>
+            <arg value="-Dsun.jnu.encoding=utf-8"/>
+            <arg value="--java-options"/>
+            <arg value="-Dfile.encoding=utf-8"/>
+            <arg value="--java-options"/>
+            <arg value="-Djava.security.egd=file:/dev/./urandom"/>
+            <arg value="--main-jar"/>
+            <arg value="linux-${fullversion}.jar"/>
+            <arg value="--main-class"/>
+            <arg value="ch.cyberduck.ui.fx.MainApplication"/>
+            <arg value="--resource-dir"/>
+            <arg value="${build.resources}"/>
+            <arg value="--copyright"/>
+            <arg value="${copyright}"/>
+            <arg value="--description"/>
+            <arg value="${app.name}"/>
+            <arg value="--vendor"/>
+            <arg value="cyberduck.io"/>
+            <arg value="--type"/>
+            <arg value="${type}"/>
+            <arg value="--verbose"/>
+        </exec>
+    </target>
+</project>
