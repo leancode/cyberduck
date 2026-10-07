@@ -90,6 +90,54 @@
                                     <outputDirectory>${project.build.directory}/profiles</outputDirectory>
                                 </configuration>
                             </execution>
+                            <execution>
+                                <id>unpack-i18n</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>unpack</goal>
+                                </goals>
+                                <configuration>
+                                    <artifactItems>
+                                        <artifactItem>
+                                            <groupId>ch.cyberduck</groupId>
+                                            <artifactId>i18n</artifactId>
+                                            <version>${project.version}</version>
+                                            <type>jar</type>
+                                        </artifactItem>
+                                    </artifactItems>
+                                    <!-- Only the text tables, not the interface files of the macOS application -->
+                                    <includes>*.lproj/*.strings,*.lproj/*.strings.1</includes>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
+                                    <overWriteReleases>true</overWriteReleases>
+                                    <overWriteSnapshots>true</overWriteSnapshots>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <!-- The native bundle needs the jar of this module, so it is built in the package phase -->
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>run-ant-target</id>
+                                <phase>none</phase>
+                            </execution>
+                            <execution>
+                                <id>package-linux</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <property name="home" value="${main.basedir}"/>
+                                        <property name="version" value="${project.version}"/>
+                                        <property name="revision" value="${git.commitsCount}"/>
+                                        <property name="hash" value="${git.revision}"/>
+                                        <ant antfile="${project.basedir}/build.xml" target="build" dir="."/>
+                                    </target>
+                                </configuration>
+                            </execution>
                         </executions>
                     </plugin>
                 </plugins>
