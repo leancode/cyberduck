@@ -135,7 +135,7 @@ Read these before every session.
   - Verified the exclusion is needed: with it removed the enforcer fails with
     "Restricted to JDK 8 yet org.openjfx:javafx-controls ... targeted to JDK 23".
 
-- [ ] **1.2 Launcher, empty window, and `run.sh`**
+- [x] **1.2 Launcher, empty window, and `run.sh`**
 
   **Do**
   - `MainApplication.java`: plain `main`. Handles `--version` (print `Version` and return without
@@ -154,6 +154,15 @@ Read these before every session.
   ```
 
   **Commit**: `Add JavaFX launcher and empty main window.`
+
+  **Done (executor notes)**
+  - `--version` prints `Cyberduck 9.6.0-SNAPSHOT`. Until step 1.3 it uses `MemoryPreferences`; step 1.3 replaces that.
+  - The window proof is stronger than the exit code. With `x11-utils` installed
+    (`sudo apt-get install -y x11-utils xdotool`) run the app in the background under `xvfb-run` and
+    `xwininfo -root -tree | grep '"Cyberduck"'` shows a 900x600 window.
+  - JavaFX prints `Unsupported JavaFX configuration: classes were loaded from 'unnamed module'` when started from the
+    class path. It is a warning only and is expected with this design.
+  - `run.sh` uses `$JAVA_HOME/bin/java` when `JAVA_HOME` is set, so export a JDK 25 `JAVA_HOME` first.
 
 - [ ] **1.3 Persistent Linux preferences**
 
