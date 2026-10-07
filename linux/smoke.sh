@@ -17,6 +17,9 @@ cleanup() {
 trap cleanup EXIT
 # Preferences, bookmarks and logs are written to the home folder. Never touch the real one.
 export HOME="$work/home"
+# The scenarios look for English labels. The language scenarios set their own language.
+export LC_ALL=C.UTF-8
+unset LANGUAGE
 mkdir -p "$HOME/.duck"
 # Keep the passwords in the credentials file of the isolated home. The keyring of the machine may be locked and wait for
 # a prompt that no one answers.
@@ -40,6 +43,11 @@ smoke() {
 mkdir "$work/list" && touch "$work/list/a" "$work/list/b" "$work/list/c"
 smoke '^SMOKE OK core-list 3$' core-list "$work/list"
 smoke '^SMOKE OK list 3$' list "$work/list"
+
+# The labels follow the language of the session. A language list as set by the desktop session is enough.
+smoke '^SMOKE OK locale refresh=Refresh$' locale "$work/list"
+LANGUAGE=de smoke '^SMOKE OK locale refresh=Aktualisieren$' locale "$work/list"
+LANGUAGE=xx:fr:de smoke '^SMOKE OK locale refresh=Actualiser$' locale "$work/list"
 
 mkdir -p "$work/nav/a/b" && echo hello > "$work/nav/a/b/file.txt"
 smoke '^SMOKE OK navigate$' navigate "$work/nav"

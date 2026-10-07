@@ -254,7 +254,7 @@ public class TransferController extends FxController implements TransferListener
     public void show() {
         if(null == stage) {
             stage = new Stage();
-            stage.setTitle("Transfers");
+            stage.setTitle(Messages.get("Transfers"));
             stage.setScene(new Scene(this.build(), 720, 360));
             collection.addListener(new CollectionListener<Transfer>() {
                 @Override
@@ -307,9 +307,9 @@ public class TransferController extends FxController implements TransferListener
     private BorderPane build() {
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        table.setPlaceholder(new Label("No transfers"));
+        table.setPlaceholder(new Label(Messages.get("No transfers")));
 
-        final TableColumn<Transfer, Transfer> name = new TableColumn<>("Name");
+        final TableColumn<Transfer, Transfer> name = new TableColumn<>(Messages.get("Name"));
         name.setPrefWidth(260);
         name.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue()));
         name.setCellFactory(column -> new TableCell<>() {
@@ -319,7 +319,7 @@ public class TransferController extends FxController implements TransferListener
                 setText(empty || null == item ? null : String.format("%s %s", StringUtils.capitalize(item.getType().name()), item.getName()));
             }
         });
-        final TableColumn<Transfer, Transfer> status = new TableColumn<>("Status");
+        final TableColumn<Transfer, Transfer> status = new TableColumn<>(Messages.get("Status"));
         status.setPrefWidth(260);
         status.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue()));
         status.setCellFactory(column -> new TableCell<>() {
@@ -329,7 +329,7 @@ public class TransferController extends FxController implements TransferListener
                 setText(empty || null == item ? null : status(item));
             }
         });
-        final TableColumn<Transfer, Transfer> bar = new TableColumn<>("Progress");
+        final TableColumn<Transfer, Transfer> bar = new TableColumn<>(Messages.get("Progress"));
         bar.setPrefWidth(160);
         bar.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue()));
         bar.setCellFactory(column -> new TableCell<>() {
@@ -353,15 +353,15 @@ public class TransferController extends FxController implements TransferListener
         });
         table.getColumns().addAll(name, status, bar);
 
-        final Button stop = new Button("Stop");
+        final Button stop = new Button(Messages.get("Stop"));
         stop.setOnAction(event -> this.stop());
-        final Button resume = new Button("Resume");
+        final Button resume = new Button(Messages.get("Resume"));
         resume.setOnAction(event -> this.resume());
-        final Button remove = new Button("Remove");
+        final Button remove = new Button(Messages.get("Remove"));
         remove.setOnAction(event -> this.remove());
-        final Button clear = new Button("Clear");
+        final Button clear = new Button(Messages.get("Clear"));
         clear.setOnAction(event -> this.clear());
-        final Button reveal = new Button("Open Folder");
+        final Button reveal = new Button(Messages.get("Open Folder"));
         reveal.setOnAction(event -> this.reveal());
         final var selected = table.getSelectionModel().selectedItemProperty().isNull();
         stop.disableProperty().bind(selected);

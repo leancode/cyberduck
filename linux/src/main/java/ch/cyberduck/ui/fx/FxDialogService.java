@@ -59,7 +59,7 @@ public class FxDialogService implements DialogService {
             final Dialog<Credentials> dialog = new Dialog<>();
             this.owner(dialog);
             dialog.setTitle(StringUtils.defaultIfBlank(title, "Login"));
-            final ButtonType login = new ButtonType("Login", ButtonBar.ButtonData.OK_DONE);
+            final ButtonType login = new ButtonType(Messages.get("Login"), ButtonBar.ButtonData.OK_DONE);
             dialog.getDialogPane().getButtonTypes().addAll(login, ButtonType.CANCEL);
 
             final GridPane grid = new GridPane();
@@ -75,15 +75,15 @@ public class FxDialogService implements DialogService {
             }
             final TextField user = new TextField(StringUtils.defaultString(username));
             final PasswordField password = new PasswordField();
-            final CheckBox save = new CheckBox("Save password");
+            final CheckBox save = new CheckBox(Messages.get("Save password"));
             save.setSelected(options.save());
             if(options.user()) {
                 user.setPromptText(options.getUsernamePlaceholder());
-                grid.addRow(row++, new Label(StringUtils.defaultIfBlank(options.getUsernamePlaceholder(), "Username")), user);
+                grid.addRow(row++, new Label(StringUtils.defaultIfBlank(options.getUsernamePlaceholder(), Messages.get("Username"))), user);
             }
             if(options.password() || options.token()) {
                 password.setPromptText(options.getPasswordPlaceholder());
-                grid.addRow(row++, new Label(StringUtils.defaultIfBlank(options.getPasswordPlaceholder(), "Password")), password);
+                grid.addRow(row++, new Label(StringUtils.defaultIfBlank(options.getPasswordPlaceholder(), Messages.get("Password"))), password);
             }
             if(options.keychain()) {
                 grid.add(save, 1, row);
@@ -113,7 +113,7 @@ public class FxDialogService implements DialogService {
             alert.setTitle(title);
             alert.setHeaderText(title);
             alert.getDialogPane().setMinWidth(420);
-            final CheckBox suppress = new CheckBox("Do not show again");
+            final CheckBox suppress = new CheckBox(Messages.get("Do not show again"));
             if(suppressible) {
                 alert.getDialogPane().setExpandableContent(null);
                 alert.getDialogPane().setContent(this.withCheckbox(message, suppress));
@@ -143,7 +143,7 @@ public class FxDialogService implements DialogService {
             this.owner(dialog);
             dialog.setTitle(title);
             dialog.setHeaderText(title);
-            final ButtonType accept = new ButtonType("Continue", ButtonBar.ButtonData.OK_DONE);
+            final ButtonType accept = new ButtonType(Messages.get("Continue"), ButtonBar.ButtonData.OK_DONE);
             dialog.getDialogPane().getButtonTypes().addAll(accept, ButtonType.CANCEL);
             final Label text = new Label(message);
             text.setWrapText(true);

@@ -101,6 +101,10 @@ public final class Smoke {
                     System.out.printf("SMOKE OK list %d%n", list(browser, arguments.get(1)));
                     hold();
                     return 0;
+                case "locale":
+                    System.out.printf("SMOKE OK locale refresh=%s%n", onFx(() -> browser.getRefresh().getText()));
+                    hold();
+                    return 0;
                 case "connect":
                     System.out.printf("SMOKE OK connect %d%n", connect(browser, arguments.get(1)));
                     hold();
