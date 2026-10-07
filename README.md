@@ -6,7 +6,7 @@
 [![Mastodon](https://img.shields.io/mastodon/follow/109698908353278292?domain=https%3A%2F%2Ffosstodon.org%2F&style=flat)](https://fosstodon.org/@cyberduck)
 [![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20Cyberduck%20Guru-006BFF)](https://gurubase.io/g/cyberduck)
 
-This is the development home for Cyberduck, a libre file transfer client for macOS and Windows. Command line interface (CLI) for Linux, macOS and Windows. The core libraries are used in [Mountain Duck](https://mountainduck.io/).
+This is the development home for Cyberduck, a libre file transfer client for macOS, Windows and Linux. Command line interface (CLI) for Linux, macOS and Windows. The core libraries are used in [Mountain Duck](https://mountainduck.io/).
 
 <img src="https://cdn.cyberduck.io/img/cyberduck-icon-rect-512.png" alt="Cyberduck Icon" width="400px"/>
 
@@ -147,6 +147,7 @@ Run with `-Pinstaller` to build installer packages with build artifacts
 * `cli/osx/target/release/*.(pkg|tar.gz)`
 * `cli/windows/target/release/*.(exe|msi)`
 * `cli/linux/target/release/*.(deb|rpm)`
+* `linux/target/release/*.(deb|rpm)`
 
 ### macOS
 
@@ -155,6 +156,33 @@ Active the sandboxing profile with `-Psandbox` to apply sandbox entitlements `co
 ### Windows
 
 You will run into warnings from `MSBuild`/`WiX` that are unrelated to how Cyberduck is built. You may safely ignore them.
+
+### Linux
+
+The desktop application is a JavaFX application in the `linux` module. It needs JDK 25 (for example `sudo apt-get install openjdk-25-jdk` on Ubuntu 24.04), and `rpm` and `fakeroot` to create the packages.
+
+Build the module and everything it depends on, without running their tests:
+
+```sh
+SKIP_SIGN=true mvn install -DskipTests --also-make --projects i18n,profiles,linux
+```
+
+The packages and a runnable application folder are created by every build of the module, not only with `-Pinstaller`:
+
+* `linux/target/release/cyberduck_*.deb`
+* `linux/target/release/cyberduck-*.rpm`
+* `linux/target/release/Cyberduck/bin/Cyberduck`
+
+Install a package with `sudo apt install ./cyberduck_*.deb` or `sudo dnf install ./cyberduck-*.rpm`. This adds a menu entry and the command `cyberduck`. Settings, bookmarks and logs are in `~/.duck`.
+
+Run the application from the build tree with `linux/run.sh`. To test, a virtual display is enough:
+
+```sh
+xvfb-run -a mvn verify -pl linux     # Unit tests. Tests that use Docker or a display are skipped when it is missing.
+xvfb-run -a linux/smoke.sh           # Drives the real windows and dialogs against local folders, a TLS server and, with Docker, an SFTP server.
+```
+
+`linux/PLAN.md` describes how the module was built and what each step proved.
 
 ## Debugging
 

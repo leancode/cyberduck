@@ -1009,7 +1009,7 @@ later publishes packages.
   - As the plan said, this cannot be proven from a branch: the workflows use self-hosted runners and release secrets. Check the next real
     release run: the Linux legs should upload `cyberduck_*.deb` and `cyberduck-*.rpm`, and the GitHub release should list them.
 
-- [ ] **4.7 Documentation**
+- [x] **4.7 Documentation**
 
   **Do**: add a Linux section to `README.md` (how to build `linux`, where the packages land:
   `linux/target/release/*.deb|*.rpm`), mention the module in `AGENTS.md` under platform front-ends,
@@ -1019,6 +1019,13 @@ later publishes packages.
   were copied from proofs above and run successfully.
 
   **Commit**: `Document Linux GUI build and packages.`
+
+  **Done (executor notes)**
+  - `README.md` has a Linux section (prerequisites, build, packages, install, run from the build tree, tests) and lists the packages
+    next to the others. `AGENTS.md` names the `linux` module in the list of front-ends. `CHANGELOG.md` has a feature line under 9.6.0.
+  - The build and test commands in the README were run exactly as written on 2026-10-07:
+    `SKIP_SIGN=true mvn install -DskipTests --also-make --projects i18n,profiles,linux` and `xvfb-run -a mvn verify -pl linux`.
+    Without `-Drevision=0` the packages are named with the commit count (`cyberduck_9.6.0.569_amd64.deb`).
 
 ---
 
