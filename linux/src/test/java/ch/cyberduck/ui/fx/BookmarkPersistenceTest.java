@@ -20,8 +20,10 @@ import ch.cyberduck.core.Credentials;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.Local;
 import ch.cyberduck.core.ProtocolFactory;
+import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.sftp.SFTPProtocol;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -46,10 +48,26 @@ public class BookmarkPersistenceTest {
         }
     };
 
+    private String monitor;
+
     @Before
     public void register() {
         // The reader looks up the protocol of a bookmark in the global factory
         ProtocolFactory.get().register(sftp);
+        // The folder monitor re-reads files from a second thread. When a file is deleted right after it was written, a late
+        // event can add the bookmark again and write the file back. These tests prove the files, not the monitor.
+        monitor = PreferencesFactory.get().getProperty("bookmarks.folder.monitor");
+        PreferencesFactory.get().setProperty("bookmarks.folder.monitor", false);
+    }
+
+    @After
+    public void restore() {
+        if(monitor == null) {
+            PreferencesFactory.get().deleteProperty("bookmarks.folder.monitor");
+        }
+        else {
+            PreferencesFactory.get().setProperty("bookmarks.folder.monitor", monitor);
+        }
     }
 
     private Local directory() {
