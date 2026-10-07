@@ -738,7 +738,7 @@ Note on the existing CI: once step 1.1 adds `linux` to the reactor, the `ubuntu-
 is intended. Phase 3 adds a dedicated workflow that provides a display, runs the smoke suite, and
 later publishes packages.
 
-- [ ] **3.1 Add `.github/workflows/linux-gui.yml`**
+- [x] **3.1 Add `.github/workflows/linux-gui.yml`**
 
   **Do**
   - Name `Linux GUI`. Triggers: `push` to `master` and to the working branch, `pull_request`.
@@ -762,7 +762,22 @@ later publishes packages.
 
   **Commit**: `Add GitHub Actions workflow for Linux GUI.`
 
-- [ ] **3.2 Run the Testcontainers SFTP test in CI**
+  **Done (executor notes)**
+  - Run 1 of the `Linux GUI` workflow on `5ce6de01` was green in about 4 minutes
+    (https://github.com/leancode/cyberduck/actions/runs/37666628368). The log shows `Tests run: 53, Failures: 0, Errors: 0,
+    Skipped: 0` and all twelve smoke scenarios (`core-list` through `sftp`, including `tls` and `sftp`).
+  - The workflow is split into three steps. (1) `mvn install -DskipTests --also-make --projects i18n,profiles,linux` installs
+    the modules the GUI depends on without running their tests, because `run.sh` resolves the classpath from the local Maven
+    repository and `verify` alone does not install. (2) `xvfb-run -a mvn verify --projects linux` runs the module tests with a
+    display. (3) `xvfb-run -a linux/smoke.sh`.
+  - Packages needed on the runner: `xvfb libgtk-3-0t64 libgl1 libxtst6` (JavaFX needs GTK 3 and OpenGL). Python 3, OpenSSL and
+    Docker are already on `ubuntu-latest`, which `smoke.sh` needs for the TLS and SFTP scenarios.
+  - The push trigger covers `master` and `dom/**`. A new push to the same branch cancels the run in progress, so wait for a run to
+    finish before pushing again when you need its result.
+  - Reading a run from the agent: `mcp__github__actions_list` (`list_workflow_runs`, `list_workflow_jobs`) and
+    `mcp__github__get_job_logs` with `tail_lines`.
+
+- [x] **3.2 Run the Testcontainers SFTP test in CI**
 
   **Do**
   - Add a step after the smoke tests:
@@ -772,6 +787,12 @@ later publishes packages.
   **Proof**: push; the step passes in the `Linux GUI` run.
 
   **Commit**: `Run SFTP end-to-end test in Linux GUI workflow.`
+
+  **Done (executor notes)**
+  - No extra step was needed. The `TestcontainerTest` category is not excluded by default, so the test already runs in step (2)
+    of 3.1. The log of run 1 shows `Running ch.cyberduck.ui.fx.SFTPBrowserIntegrationTest` and
+    `Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`. Adding a second run of the same test would only make the build slower.
+    The `sftp` smoke scenario also ran against the container.
 
 - [ ] **3.3 Publish the test report**
 

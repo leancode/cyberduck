@@ -16,6 +16,9 @@ jobs:
     name: Build and test
     runs-on: ubuntu-latest
     permissions:
+      checks: write
+      pull-requests: write
+      statuses: write
       contents: read
     steps:
       - uses: actions/checkout@v7
@@ -43,6 +46,12 @@ jobs:
           SKIP_SIGN: true
       - name: Run the smoke tests
         run: xvfb-run -a linux/smoke.sh
+      - name: Publish Test Report
+        if: always() && github.event.pull_request.head.repo.fork == false
+        uses: ScalableCapital/action-surefire-report@v2
+        with:
+          check_name: Test Report (linux-gui)
+          report_paths: linux/target/surefire-reports/TEST-*.xml
       - name: Archive test reports
         if: always()
         uses: actions/upload-artifact@v7
