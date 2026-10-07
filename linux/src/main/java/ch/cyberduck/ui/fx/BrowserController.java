@@ -86,7 +86,11 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.SelectionMode;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
@@ -94,9 +98,11 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.scene.layout.Priority;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -162,6 +168,7 @@ public class BrowserController extends FxController {
      */
     private Path pending;
     private ConnectionDialog connection;
+    private MenuBar menu;
     private final DialogService dialogs = new FxDialogService(this);
     /**
      * Select this file after the next listing
@@ -260,7 +267,7 @@ public class BrowserController extends FxController {
 
         root.setCenter(table);
         root.setLeft(bookmarks.getPane());
-        root.setTop(top);
+        root.setTop(new VBox(this.menu(), top));
         root.setBottom(bottom);
         this.updateNavigation();
         return root;
@@ -281,6 +288,55 @@ public class BrowserController extends FxController {
             }
         });
         return column;
+    }
+
+    private MenuBar menu() {
+        final MenuItem newBrowser = new MenuItem("New Browser");
+        newBrowser.setAccelerator(KeyCombination.keyCombination("Shortcut+N"));
+        newBrowser.setOnAction(event -> MainController.get().newBrowser(null));
+        final MenuItem open = new MenuItem("Open Connection…");
+        open.setAccelerator(KeyCombination.keyCombination("Shortcut+O"));
+        open.setOnAction(event -> this.connect());
+        final MenuItem disconnect = new MenuItem("Disconnect");
+        disconnect.setOnAction(event -> this.unmount(() -> {
+            //
+        }));
+        disconnect.disableProperty().bind(Bindings.createBooleanBinding(() -> null == rendered, renderedProperty));
+        final MenuItem closeWindow = new MenuItem("Close Window");
+        closeWindow.setAccelerator(KeyCombination.keyCombination("Shortcut+W"));
+        closeWindow.setOnAction(event -> this.close());
+        final MenuItem quit = new MenuItem("Quit");
+        quit.setAccelerator(KeyCombination.keyCombination("Shortcut+Q"));
+        quit.setOnAction(event -> MainController.get().quit());
+        final MenuItem showTransfers = new MenuItem("Transfers");
+        showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
+        showTransfers.setOnAction(event -> TransferController.get().show());
+        menu = new MenuBar(
+            new Menu("File", null, newBrowser, open, disconnect, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu("Window", null, showTransfers));
+        return menu;
+    }
+
+    MenuBar getMenuBar() {
+        return menu;
+    }
+
+    /**
+     * Disconnect, then close the window. The application ends when it was the last window.
+     */
+    public void close() {
+        this.unmount(() -> {
+            this.dispose();
+            MainController.get().closed(this);
+        });
+    }
+
+    /**
+     * Release the window
+     */
+    void dispose() {
+        bookmarks.dispose();
+        stage.hide();
     }
 
     public void show() {

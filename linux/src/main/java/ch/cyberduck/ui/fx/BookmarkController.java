@@ -59,6 +59,27 @@ public class BookmarkController {
     private final BorderPane pane = new BorderPane();
 
     private ConnectionDialog dialog;
+    private final CollectionListener<Host> listener = new CollectionListener<>() {
+        @Override
+        public void collectionLoaded() {
+            refresh();
+        }
+
+        @Override
+        public void collectionItemAdded(final Host item) {
+            refresh();
+        }
+
+        @Override
+        public void collectionItemRemoved(final Host item) {
+            refresh();
+        }
+
+        @Override
+        public void collectionItemChanged(final Host item) {
+            refresh();
+        }
+    };
 
     public BookmarkController(final BrowserController browser) {
         this(browser, BookmarkCollection.defaultCollection(), new FxDialogService(browser));
@@ -87,28 +108,15 @@ public class BookmarkController {
         pane.setBottom(buttons);
         pane.setPrefWidth(230);
 
-        bookmarks.addListener(new CollectionListener<Host>() {
-            @Override
-            public void collectionLoaded() {
-                refresh();
-            }
-
-            @Override
-            public void collectionItemAdded(final Host item) {
-                refresh();
-            }
-
-            @Override
-            public void collectionItemRemoved(final Host item) {
-                refresh();
-            }
-
-            @Override
-            public void collectionItemChanged(final Host item) {
-                refresh();
-            }
-        });
+        bookmarks.addListener(listener);
         this.refresh();
+    }
+
+    /**
+     * Stop listening to the collection when the window is closed
+     */
+    public void dispose() {
+        bookmarks.removeListener(listener);
     }
 
     public BorderPane getPane() {

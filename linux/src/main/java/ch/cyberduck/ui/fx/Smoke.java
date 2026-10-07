@@ -67,6 +67,14 @@ public final class Smoke {
 
     /**
      * @param arguments Mode followed by the arguments of the mode
+     * @return True if the scenario ends the application itself and the process is expected to exit without being told to
+     */
+    public static boolean endsApplication(final List<String> arguments) {
+        return !arguments.isEmpty() && "windows".equals(arguments.get(0));
+    }
+
+    /**
+     * @param arguments Mode followed by the arguments of the mode
      * @return True if the mode runs without a window
      */
     public static boolean isHeadless(final List<String> arguments) {
@@ -100,6 +108,15 @@ public final class Smoke {
                 case "download":
                     System.out.printf("SMOKE OK download progress=%d%n", download(browser, arguments.get(1), arguments.get(2)));
                     hold();
+                    return 0;
+                case "windows":
+                    windows(browser, arguments.get(1), arguments.get(2));
+                    System.out.println("SMOKE OK windows");
+                    // Quit like a user and leave the process to end by itself
+                    onFx(() -> {
+                        browser.getMenuBar().getMenus().get(0).getItems().stream().filter(i -> "Quit".equals(i.getText())).findFirst().orElseThrow().fire();
+                        return null;
+                    });
                     return 0;
                 case "fileops":
                     fileops(browser, arguments.get(1));
@@ -293,6 +310,38 @@ public final class Smoke {
         });
         await("list emptied", () -> onFx(() -> transfers.getTable().getItems().isEmpty()));
         return events;
+    }
+
+    private static void menu(final BrowserController browser, final String name) throws Exception {
+        onFx(() -> {
+            browser.getMenuBar().getMenus().get(0).getItems().stream().filter(i -> name.equals(i.getText())).findFirst().orElseThrow().fire();
+            return null;
+        });
+    }
+
+    /**
+     * Two windows each with its own connection, then close one like the window button does
+     */
+    static void windows(final BrowserController first, final String one, final String two) throws Exception {
+        final MainController main = MainController.get();
+        mount(first, one);
+        check("one window", 1 == onFx(() -> main.getBrowsers().size()));
+        menu(first, "New Browser");
+        await("second window", () -> onFx(() -> 2 == main.getBrowsers().size()));
+        final BrowserController second = onFx(() -> main.getBrowsers().get(1));
+        check("second window is disconnected", !onFx(second::isMounted));
+        mount(second, two);
+        check("windows show their own folders", !names(first).equals(names(second)));
+        check("first still connected", onFx(first::isMounted) && one.equals(onFx(() -> first.getRendered().getAbsolute())));
+
+        // The window button disconnects first and then closes the window
+        onFx(() -> {
+            second.getStage().fireEvent(new javafx.stage.WindowEvent(second.getStage(), javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST));
+            return null;
+        });
+        await("second window closed", () -> onFx(() -> 1 == main.getBrowsers().size() && !second.getStage().isShowing()));
+        check("second disconnected", !onFx(second::isMounted));
+        check("first window unaffected", onFx(first::isMounted) && first.getStage().isShowing());
     }
 
     /**
