@@ -70,9 +70,10 @@ smoke '^SMOKE OK fileops$' fileops "$work/ops"
 
 # Quitting must end the process by itself. A hang is a failure, so the timeout is short.
 mkdir -p "$work/win-one" "$work/win-two" && touch "$work/win-one/a" "$work/win-one/b" "$work/win-two/x"
+prefs_before="$(stat -c '%i %y' "$HOME/.duck/cyberduck.properties")"
 out="$(timeout 30 "$bin" --smoke windows "$work/win-one" "$work/win-two" 2>&1)" || { echo "$out"; fail "windows: failed or did not exit by itself within 30 seconds"; }
 echo "$out" | grep -q '^SMOKE OK windows$' || { echo "$out"; fail "windows: expected 'SMOKE OK windows'"; }
-[ -f "$HOME/.duck/cyberduck.properties" ] || fail "windows: preferences were not saved when quitting"
+[ "$(stat -c '%i %y' "$HOME/.duck/cyberduck.properties")" != "$prefs_before" ] || fail "windows: preferences were not saved when quitting"
 echo "ok windows"
 
 # A server with a certificate that nobody trusts. The connection must not use a proxy from the environment.

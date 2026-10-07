@@ -1062,9 +1062,18 @@ later publishes packages.
   `dbus-run-session -- sh -c 'eval "$(printf test | gnome-keyring-daemon --unlock --components=secrets)"; mvn ...'`
   (an empty keyring password makes the daemon ask a prompter for a display, so use a non-empty one).
 
-- [ ] **5.2 Desktop notifications**: `NotifySendNotificationService` using `notify-send`, registered
+- [x] **5.2 Desktop notifications**: `NotifySendNotificationService` using `notify-send`, registered
   under `factory.notification.class`; transfer completion notifies. Proof: test skipped without
   `notify-send`; smoke download prints `notified` when available.
+  **Executor note**: done. `NotifySendNotificationService` runs `notify-send --app-name=Cyberduck` with the transfer
+  identifier as the replace hint and `--` before the title, so a title that starts with a dash is not an option. Core
+  already notifies when a transfer ends, so only the service and its registration were needed. A missing tool is
+  remembered and ignored. Proof: 4 unit tests (fake tool, dash titles, missing tool, real tool when installed) and a
+  smoke check that puts a fake `notify-send` first on the PATH and requires the line `Download complete` after the
+  download scenario (`ok notified`, passed locally). Titles have no translation entry yet, so the English text is shown.
+  Finding: `linux/smoke.sh` pins its isolated home to the credentials file store, because a machine with `secret-tool`
+  and a display starts a keyring that waits for a prompt and made the SFTP scenario time out. The check that quitting
+  saves the preferences now compares the file before and after, since the pin creates the file.
 - [ ] **5.3 Localization**: `applicationLocales()` returns the `*.lproj` directories found next to
   the resources; `RegexLocale` already reads them. Proof: `LANG=de_DE.UTF-8 linux/run.sh --smoke list`
   prints a German toolbar label captured in the OK line.
