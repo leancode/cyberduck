@@ -349,7 +349,7 @@ of a hang on failure.
   - Visual proof: run `SMOKE_HOLD=8 linux/run.sh --smoke list <dir>` under `xvfb-run -s "-screen 0 1000x700x24"` and take
     `import -window root shot.png` (ImageMagick). `SMOKE_HOLD` keeps the window open for that many seconds after the scenario.
 
-- [ ] **2.2 Navigation**
+- [x] **2.2 Navigation**
 
   **Do**
   - Double-click on a directory row lists it; the Up button lists the parent; typing a path in the
@@ -365,6 +365,15 @@ of a hang on failure.
   ```
 
   **Commit**: `Add directory navigation in browser.`
+
+  **Done (executor notes)**
+  - Added Back, Up and Refresh buttons and an editable path field. Relative paths typed in the field are relative to the current
+    folder. A listing that fails keeps the previous folder and restores the field. A listing that was superseded by a newer
+    request is ignored.
+  - The smoke fires real JavaFX events: a double-click `MouseEvent` on the table row, `Button.fire()` and an `ActionEvent` on the
+    path field. It also checks the failure case (`<dir>/missing`).
+  - Checked the test can fail: with the click count handler changed to 3 the scenario ends with
+    `SMOKE FAIL Timeout waiting for directory ... shown` after the 60 s wait.
 
 - [ ] **2.3 Connection dialog**
 

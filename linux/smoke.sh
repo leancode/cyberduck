@@ -27,4 +27,7 @@ mkdir "$work/list" && touch "$work/list/a" "$work/list/b" "$work/list/c"
 smoke '^SMOKE OK core-list 3$' core-list "$work/list"
 smoke '^SMOKE OK list 3$' list "$work/list"
 
+mkdir -p "$work/nav/a/b" && echo hello > "$work/nav/a/b/file.txt"
+smoke '^SMOKE OK navigate$' navigate "$work/nav"
+
 echo "SMOKE SCRIPT OK"
