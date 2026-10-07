@@ -47,4 +47,8 @@ mkdir -p "$work/up-src" "$work/up-dst" && head -c 1048576 /dev/urandom > "$work/
 smoke '^SMOKE OK upload rows=1$' upload "$work/up-src" "$work/up-dst"
 [ "$(sha256sum < "$work/up-src/g.bin")" = "$(sha256sum < "$work/up-dst/g.bin")" ] || fail "upload: checksum of the uploaded file differs"
 
+mkdir -p "$work/ops"
+smoke '^SMOKE OK fileops$' fileops "$work/ops"
+[ -z "$(ls -A "$work/ops")" ] || fail "fileops: expected an empty folder but found $(ls -A "$work/ops")"
+
 echo "SMOKE SCRIPT OK"

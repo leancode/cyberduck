@@ -38,6 +38,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.GridPane;
 import javafx.stage.Window;
 
@@ -119,6 +120,19 @@ public class FxDialogService implements DialogService {
             }
             final boolean accepted = alert.showAndWait().filter(type -> type == accept).isPresent();
             return new Confirmation(accepted, suppressible && suppress.isSelected());
+        });
+    }
+
+    @Override
+    public String input(final String title, final String message, final String initial) {
+        return this.onApplicationThread(() -> {
+            final TextInputDialog dialog = new TextInputDialog(initial);
+            this.owner(dialog);
+            dialog.setTitle(title);
+            dialog.setHeaderText(title);
+            dialog.setContentText(message);
+            dialog.setOnShown(event -> dialog.getEditor().selectAll());
+            return dialog.showAndWait().orElse(null);
         });
     }
 

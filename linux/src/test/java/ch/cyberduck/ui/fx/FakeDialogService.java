@@ -31,6 +31,7 @@ public class FakeDialogService implements DialogService {
     public Credentials credentials;
     public Confirmation confirmation = Confirmation.YES;
     public TransferAction action;
+    public String input;
     public final List<TransferAction> offered = new ArrayList<>();
 
     public int credentialRequests;
@@ -50,6 +51,12 @@ public class FakeDialogService implements DialogService {
         titles.add(title);
         messages.add(message);
         return confirmation;
+    }
+
+    @Override
+    public String input(final String title, final String message, final String initial) {
+        titles.add(title);
+        return input;
     }
 
     @Override
