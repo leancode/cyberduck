@@ -246,7 +246,7 @@ Read these before every session.
     one file name. In this build the file holds the native libraries (`unzip -l linux/target/javafx-graphics-25.0.4.jar | grep -c '\.so'`
     prints 10), but this depends on copy order, so step 4.1 must verify it in the app image.
 
-- [ ] **1.5 `FxController` and the JavaFX test harness**
+- [x] **1.5 `FxController` and the JavaFX test harness**
 
   **Do**
   - `FxController extends AbstractController`: `invoke(MainAction)` -> `Platform.runLater`;
@@ -264,9 +264,15 @@ Read these before every session.
   mvn --batch-mode -pl linux -DskipSign -Drevision=0 test                 # headless: FxControllerTest skipped, build green
   xvfb-run -a mvn --batch-mode -pl linux -DskipSign -Drevision=0 test     # with display: FxControllerTest runs and passes
   ```
-  The second run's surefire output shows `FxControllerTest` with `Tests run: 1, Failures: 0, Skipped: 0`.
+  The second run's surefire output shows `FxControllerTest` with `Tests run: 4, Failures: 0, Skipped: 0`; the first run shows the same class with `Skipped: 4`.
 
   **Commit**: `Add JavaFX controller with main thread dispatch.`
+
+  **Done (executor notes)**
+  - `FxController.invoke` skips actions whose `isValid()` is false (as the macOS and Windows controllers do), runs inline on the
+    JavaFX thread, queues with `Platform.runLater`, and blocks on a latch when `wait` is true.
+  - `FxToolkit` (test) also accepts `WAYLAND_DISPLAY`, and offers `flush()` to wait for queued JavaFX work.
+  - Headless smoke runs (step 1.6) cannot use `FxController` because it needs the toolkit. Use a toolkit-free controller there.
 
 - [ ] **1.6 Headless smoke: list a local directory through the core**
 
