@@ -184,6 +184,9 @@ xvfb-run -a linux/smoke.sh           # Drives the real windows and dialogs again
 
 `linux/PLAN.md` describes how the module was built and what each step proved.
 
+<img src="linux/screenshots/browser-sftp.png" alt="Browsing an SFTP server on Linux" width="600px"/>
+<img src="linux/screenshots/transfers.png" alt="The transfers window on Linux" width="600px"/>
+
 ## Debugging
 
 ### macOS

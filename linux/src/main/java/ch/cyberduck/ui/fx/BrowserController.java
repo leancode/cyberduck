@@ -105,6 +105,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -213,6 +214,13 @@ public class BrowserController extends FxController {
         final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, download, upload, newFolder, rename, delete, transfers, location);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
+        // Never cut the labels of the buttons. The path field gives way instead and the window cannot get narrower than the toolbar.
+        for(Region button : new Region[]{bookmarksToggle, connect, back, up, refresh, download, upload, newFolder, rename, delete, transfers}) {
+            button.setMinWidth(Region.USE_PREF_SIZE);
+        }
+        location.setPrefWidth(160);
+        location.setMinWidth(80);
+        stage.setOnShown(event -> stage.setMinWidth(top.minWidth(-1) + stage.getWidth() - stage.getScene().getWidth()));
 
         table.setItems(rows);
         table.setPlaceholder(new Label());
