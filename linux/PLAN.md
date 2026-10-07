@@ -794,7 +794,7 @@ later publishes packages.
     `Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`. Adding a second run of the same test would only make the build slower.
     The `sftp` smoke scenario also ran against the container.
 
-- [ ] **3.3 Publish the test report**
+- [x] **3.3 Publish the test report**
 
   **Do**: add the `ScalableCapital/action-surefire-report@v2` step from `build.yml` with
   `check_name: Test Report (linux-gui)` and the same `permissions` block as `build.yml`.
@@ -802,6 +802,10 @@ later publishes packages.
   **Proof**: push; a check named `Test Report (linux-gui)` appears on the commit.
 
   **Commit**: `Publish Linux GUI test report.`
+
+  **Executor note**: done in step 3.2. The check `Test Report (linux-gui)` was created on every run since run 2
+  (https://github.com/leancode/cyberduck/runs/112981812639 and later). It reports 53 tests and shows a failing test by
+  file and line, as seen on run 5.
 
 ---
 
