@@ -34,15 +34,19 @@ import ch.cyberduck.core.pool.SessionPool;
 import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.threading.DisconnectBackgroundAction;
+import ch.cyberduck.core.threading.DefaultMainAction;
 import ch.cyberduck.core.threading.WorkerBackgroundAction;
 import ch.cyberduck.core.transfer.DownloadTransfer;
 import ch.cyberduck.core.transfer.Transfer;
 import ch.cyberduck.core.transfer.TransferItem;
 import ch.cyberduck.core.transfer.TransferOptions;
+import ch.cyberduck.core.transfer.UploadTransfer;
 import ch.cyberduck.core.worker.ListWorker;
 import ch.cyberduck.core.worker.MountWorker;
 import ch.cyberduck.ui.browser.DefaultBrowserFilter;
 import ch.cyberduck.ui.browser.DownloadDirectoryFinder;
+import ch.cyberduck.ui.browser.UploadDirectoryFinder;
+import ch.cyberduck.ui.browser.UploadTargetFinder;
 import ch.cyberduck.ui.comparator.FilenameComparator;
 import ch.cyberduck.ui.comparator.OwnerComparator;
 import ch.cyberduck.ui.comparator.PermissionsComparator;
@@ -53,6 +57,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -85,6 +90,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 /**
@@ -116,6 +122,7 @@ public class BrowserController extends FxController {
     private final Button up = new Button("Up");
     private final Button refresh = new Button("Refresh");
     private final Button download = new Button("Download");
+    private final Button upload = new Button("Upload");
     private final StringProperty summary = new SimpleStringProperty(StringUtils.EMPTY);
 
     private final Cache<Path> cache = new PathCache(preferences.getInteger("browser.cache.size"));
@@ -137,6 +144,7 @@ public class BrowserController extends FxController {
      * Directory shown in the table
      */
     private Path rendered;
+    private final javafx.beans.property.ObjectProperty<Path> renderedProperty = new javafx.beans.property.SimpleObjectProperty<>();
     /**
      * Directory requested but not yet listed. Used to ignore a listing that has been superseded.
      */
@@ -164,11 +172,13 @@ public class BrowserController extends FxController {
         up.setOnAction(event -> this.up());
         refresh.setOnAction(event -> this.reload());
         download.setOnAction(event -> this.download());
+        upload.setOnAction(event -> this.upload());
+        upload.disableProperty().bind(Bindings.createBooleanBinding(() -> null == rendered, renderedProperty));
         download.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, download, location);
+        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, download, upload, location);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
 
@@ -327,6 +337,7 @@ public class BrowserController extends FxController {
                 history.clear();
                 updateNavigation();
                 rendered = null;
+                renderedProperty.set(null);
                 rows.clear();
                 summary.set(StringUtils.EMPTY);
                 location.clear();
@@ -473,8 +484,59 @@ public class BrowserController extends FxController {
             .map(file -> new TransferItem(file, LocalFactory.get(target, file.getName()))).collect(Collectors.toList())));
     }
 
+    /**
+     * Choose files on this computer and upload them to the folder that is shown
+     */
+    void upload() {
+        if(!this.isMounted() || null == workdir) {
+            return;
+        }
+        final FileChooser chooser = new FileChooser();
+        chooser.setTitle("Upload");
+        final Local suggested = new UploadDirectoryFinder().find(pool.getHost());
+        if(suggested.exists()) {
+            chooser.setInitialDirectory(new File(suggested.getAbsolute()));
+        }
+        final List<File> files = chooser.showOpenMultipleDialog(stage);
+        if(files != null) {
+            this.upload(files);
+        }
+    }
+
+    /**
+     * Upload files to the selected folder or else the folder that is shown
+     */
+    void upload(final List<File> files) {
+        if(!this.isMounted() || null == workdir || files.isEmpty()) {
+            return;
+        }
+        final Host host = pool.getHost();
+        final Path destination = new UploadTargetFinder(workdir).find(table.getSelectionModel().getSelectedItem());
+        final List<TransferItem> uploads = new ArrayList<>();
+        for(File file : files) {
+            final Local local = LocalFactory.get(file.getAbsolutePath());
+            uploads.add(new TransferItem(new Path(destination, local.getName(),
+                local.isDirectory() ? EnumSet.of(Path.Type.directory) : EnumSet.of(Path.Type.file)), local));
+        }
+        log.debug("Upload {} to {}", uploads, destination);
+        this.transfer(new UploadTransfer(host, uploads));
+    }
+
     private void transfer(final Transfer transfer) {
-        TransferController.get().start(transfer, new TransferOptions(), this, completed -> this.message(String.format("%s completed", completed.getName())));
+        TransferController.get().start(transfer, new TransferOptions(), this, completed -> {
+            this.message(String.format("%s completed", completed.getName()));
+            // Show the new files
+            this.invoke(new DefaultMainAction() {
+                @Override
+                public void run() {
+                    reload();
+                }
+            });
+        });
+    }
+
+    Button getUploadButton() {
+        return upload;
     }
 
     Button getDownloadButton() {
@@ -509,6 +571,7 @@ public class BrowserController extends FxController {
             showHidden ? new NullFilter<>() : new DefaultBrowserFilter());
         rows.setAll(list.toList());
         rendered = directory;
+        renderedProperty.set(directory);
         summary.set(String.format("%d items", rows.size()));
     }
 }

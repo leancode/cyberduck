@@ -570,7 +570,7 @@ of a hang on failure.
   - Not yet verified: whether a stateful protocol (SFTP) asks for the password again for the transfer connection. Step 2.12
     checks this against the container.
 
-- [ ] **2.8 Upload**
+- [x] **2.8 Upload**
 
   **Do**
   - Upload button opens a `FileChooser` (multiple) and starts `new UploadTransfer(host, root, local)`
@@ -585,6 +585,15 @@ of a hang on failure.
   ```
 
   **Commit**: `Add upload transfer.`
+
+  **Done (executor notes)**
+  - The Upload button opens a JavaFX `FileChooser` (multiple files) and calls `upload(List<File>)`, which builds the remote paths
+    like the macOS controller and starts an `UploadTransfer`. The smoke calls `upload(List<File>)` directly because the native
+    chooser cannot be driven. Folders cannot be chosen yet (a `DirectoryChooser` button is a Phase 5 item).
+  - `UploadTargetFinder` returns the folder that is shown for any table selection, so files always go to the shown folder.
+  - After a successful transfer the browser invalidates its cache and lists the folder again, so the new file shows up.
+  - Smoke `upload` mirrors `download`: the second upload meets a different remote file and the real `File exists` dialog is
+    answered with Overwrite while the old remote content is still in place. `chooseAction` is shared by both.
 
 - [ ] **2.9 Transfer window**
 

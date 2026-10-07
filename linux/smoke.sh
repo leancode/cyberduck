@@ -43,4 +43,8 @@ mkdir -p "$work/down-src" "$work/down-dst" && head -c 1048576 /dev/urandom > "$w
 smoke '^SMOKE OK download progress=[0-9]+$' download "$work/down-src" "$work/down-dst"
 [ "$(sha256sum < "$work/down-src/f.bin")" = "$(sha256sum < "$work/down-dst/f.bin")" ] || fail "download: checksum of the downloaded file differs"
 
+mkdir -p "$work/up-src" "$work/up-dst" && head -c 1048576 /dev/urandom > "$work/up-src/g.bin"
+smoke '^SMOKE OK upload rows=1$' upload "$work/up-src" "$work/up-dst"
+[ "$(sha256sum < "$work/up-src/g.bin")" = "$(sha256sum < "$work/up-dst/g.bin")" ] || fail "upload: checksum of the uploaded file differs"
+
 echo "SMOKE SCRIPT OK"
