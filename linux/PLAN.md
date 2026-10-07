@@ -964,7 +964,7 @@ later publishes packages.
     them and `/opt/cyberduck`. A complete `dnf install` with the dependencies could not be run here because the sandbox blocks the Fedora
     mirrors (`Status code: 40x`). The `install-rpm` job of the workflow does that (step 4.5).
 
-- [ ] **4.5 Package artifacts and install tests in the workflow**
+- [x] **4.5 Package artifacts and install tests in the workflow**
 
   **Do**
   - In `linux-gui.yml` add upload steps for `linux/target/release/*.deb` and `*.rpm` using
@@ -980,6 +980,16 @@ later publishes packages.
   `.deb` and `.rpm` files.
 
   **Commit**: `Upload and install-test Linux packages in workflow.`
+
+  **Executor note**: proven by run 6 of "Linux GUI" on commit `cbd912fd`
+  (https://github.com/leancode/cyberduck/actions/runs/37678626859). All four jobs are green: "Build and test" (53 tests, 12
+  smoke scenarios, desktop entry check, DEB and RPM uploaded), "Test Report (linux-gui)", "Install the deb in a clean
+  Ubuntu" and "Install the rpm in a clean Fedora". The two install jobs ran `cyberduck --version` and the list smoke
+  from the installed package, then removed it and checked that `/usr/bin/cyberduck` and `/opt/cyberduck` are gone.
+  Findings: the deb job needs up to 13 minutes because archive.ubuntu.com is slow for the GTK dependencies. Wait for it.
+  Do not cancel it, because the log of a cancelled job is not available. The jobs have `timeout-minutes` and apt retries
+  for this reason. Run 5 failed once on a race in `BookmarkPersistenceTest` (the folder monitor wrote a deleted
+  bookmark back), fixed by turning the monitor off in that test.
 
 - [x] **4.6 Wire into the release pipeline**
 
