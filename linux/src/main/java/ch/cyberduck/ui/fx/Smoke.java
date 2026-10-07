@@ -1191,11 +1191,18 @@ public final class Smoke {
         });
         final java.nio.file.Path remoteRoot = java.nio.file.Paths.get(remote);
         final java.nio.file.Path localRoot = java.nio.file.Paths.get(local);
-        await("both folders have all files", () -> java.nio.file.Files.exists(remoteRoot.resolve("l.txt")) && java.nio.file.Files.exists(localRoot.resolve("r.txt")));
-        check("l.txt arrived on the server", "from local".equals(new String(java.nio.file.Files.readAllBytes(remoteRoot.resolve("l.txt")), java.nio.charset.StandardCharsets.UTF_8).trim()));
-        check("r.txt arrived on this computer", "from server".equals(new String(java.nio.file.Files.readAllBytes(localRoot.resolve("r.txt")), java.nio.charset.StandardCharsets.UTF_8).trim()));
-        await("the newer file wins", () -> -1 == java.nio.file.Files.mismatch(remoteRoot.resolve("both.txt"), localRoot.resolve("both.txt")));
-        check("the newer content is on both sides", "newer".equals(new String(java.nio.file.Files.readAllBytes(remoteRoot.resolve("both.txt")), java.nio.charset.StandardCharsets.UTF_8).trim()));
+        // A file exists before it is complete, so wait for the content
+        await("l.txt arrived on the server", () -> content(remoteRoot.resolve("l.txt")).equals("from local"));
+        await("r.txt arrived on this computer", () -> content(localRoot.resolve("r.txt")).equals("from server"));
+        await("the newer content is on the server", () -> content(remoteRoot.resolve("both.txt")).equals("newer"));
+        check("the newer content is still on this computer", content(localRoot.resolve("both.txt")).equals("newer"));
         return String.format("SMOKE OK sync remote=%d local=%d", java.nio.file.Files.list(remoteRoot).count(), java.nio.file.Files.list(localRoot).count());
+    }
+
+    /**
+     * @return Text of the file without the line break at the end or an empty text while the file is missing
+     */
+    private static String content(final java.nio.file.Path file) throws java.io.IOException {
+        return java.nio.file.Files.exists(file) ? new String(java.nio.file.Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8).trim() : "";
     }
 }
