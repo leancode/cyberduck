@@ -164,7 +164,7 @@ Read these before every session.
     class path. It is a warning only and is expected with this design.
   - `run.sh` uses `$JAVA_HOME/bin/java` when `JAVA_HOME` is set, so export a JDK 25 `JAVA_HOME` first.
 
-- [ ] **1.3 Persistent Linux preferences**
+- [x] **1.3 Persistent Linux preferences**
 
   **Do**
   - `LinuxApplicationPreferences extends DefaultPreferences`. Constructor takes a `Local` file
@@ -196,6 +196,18 @@ Read these before every session.
   `Tests run: >=2, Failures: 0, Errors: 0`.
 
   **Commit**: `Add persistent preferences for Linux.`
+
+  **Done (executor notes)**
+  - `PreferencesFactory.set` calls `load()` before any factory is registered, so the file path cannot come from
+    `SupportDirectoryFinderFactory`. `LinuxApplicationPreferences.defaultFile()` builds `~/.duck/cyberduck.properties`
+    directly, which is the folder `UserHomeSupportDirectoryFinder` returns.
+  - Deliberately not copied from the CLI: `jna.boot.library.path` and `library.jansi.path` (JNA reads JVM system
+    properties, so they must be jpackage `--java-options` in Phase 4), `bookmarks.folder.name` (unused outside the CLI),
+    and the `echo ~` home lookup (the base class already defaults `local.user.home` to `user.home`).
+  - `application.name`, `application.identifier` and `application.version` already come from `default.properties` and the
+    jar manifest, so they are not set again.
+  - Added `XdgOpenBrowserLauncher` instead of the AWT-based `DesktopBrowserLauncher`, to avoid loading AWT/GTK next to JavaFX.
+  - Tests: `Tests run: 5, Failures: 0, Errors: 0`.
 
 - [ ] **1.4 Bootstrap: preferences, protocols, profiles, bookmarks**
 
