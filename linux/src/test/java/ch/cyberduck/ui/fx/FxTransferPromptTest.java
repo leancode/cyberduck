@@ -56,6 +56,18 @@ public class FxTransferPromptTest {
     }
 
     @Test
+    public void testSynchronizeAsksForTheDirection() throws Exception {
+        final FakeDialogService dialogs = new FakeDialogService();
+        dialogs.action = TransferAction.mirror;
+        final Local local = new Local(folder.getRoot().getAbsolutePath());
+        final TransferAction action = new FxTransferPrompt(new FxController(), dialogs, Transfer.Type.sync).prompt(new TransferItem(remote, local));
+        assertSame(TransferAction.mirror, action);
+        assertEquals("Synchronize", dialogs.titles.get(0));
+        assertTrue(dialogs.messages.get(0).contains(local.getAbsolute()));
+        assertEquals(java.util.List.of(TransferAction.download, TransferAction.upload, TransferAction.mirror), dialogs.offered);
+    }
+
+    @Test
     public void testCancelledDialogCancelsTransfer() throws Exception {
         final FakeDialogService dialogs = new FakeDialogService();
         final Local local = new Local(folder.newFile("file.bin").getAbsolutePath());

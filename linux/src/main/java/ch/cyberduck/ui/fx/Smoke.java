@@ -108,6 +108,12 @@ public final class Smoke {
                 case "vault":
                     System.out.println(vault(browser, arguments.get(1), arguments.get(2)));
                     return 0;
+                case "sync":
+                    System.out.println(sync(browser, arguments.get(1), arguments.get(2)));
+                    return 0;
+                case "duplicate":
+                    System.out.println(duplicate(browser, arguments.get(1)));
+                    return 0;
                 case "info":
                     System.out.println(info(browser, arguments.get(1), arguments.get(2)));
                     return 0;
@@ -1136,5 +1142,60 @@ public final class Smoke {
         });
         await("vault locked", () -> onFx(() -> !browser.isUnlocked(browser.getTable().getSelectionModel().getSelectedItem())));
         return String.format("SMOKE OK vault listed=%s ondisk=encrypted", local.getName());
+    }
+
+    /**
+     * Make a copy of a file on the server with the menu command and the dialog that asks for the name
+     *
+     * @param directory Folder with a file f.txt
+     */
+    private static String duplicate(final BrowserController browser, final String directory) throws Exception {
+        mount(browser, directory);
+        final java.nio.file.Path original = java.nio.file.Paths.get(directory, "f.txt");
+        select(browser, "f.txt");
+        onFx(() -> {
+            Platform.runLater(browser::duplicate);
+            return null;
+        });
+        answerInput("f copy.txt");
+        await("copy shown", () -> names(browser).contains("f copy.txt"));
+        final java.nio.file.Path copy = java.nio.file.Paths.get(directory, "f copy.txt");
+        check("the copy has the same content", -1 == java.nio.file.Files.mismatch(original, copy));
+        check("the original is still there", java.nio.file.Files.exists(original));
+        check("the copy is selected", "f copy.txt".equals(onFx(() -> browser.getTable().getSelectionModel().getSelectedItem().getName())));
+        return String.format("SMOKE OK duplicate files=%d", names(browser).size());
+    }
+
+    /**
+     * Synchronize a folder on the server with a folder on this computer in both directions. Each has a file that the
+     * other lacks and a file with the same name that is newer on this computer.
+     *
+     * @param remote Folder on the server, with r.txt and both.txt
+     * @param local  Folder on this computer, with l.txt and a newer both.txt
+     */
+    private static String sync(final BrowserController browser, final String remote, final String local) throws Exception {
+        mount(browser, remote);
+        onFx(() -> {
+            Platform.runLater(() -> browser.synchronize(new java.io.File(local)));
+            return null;
+        });
+        await("synchronize dialog", () -> onFx(() -> null != dialog()));
+        check("asks how to synchronize", "Synchronize".equals(onFx(() -> dialog().getHeaderText())));
+        onFx(() -> {
+            final DialogPane pane = dialog();
+            @SuppressWarnings("unchecked") final javafx.scene.control.ComboBox<TransferAction> choices = (javafx.scene.control.ComboBox<TransferAction>) pane.lookup(".combo-box");
+            check("offers download, upload and both", List.of(TransferAction.download, TransferAction.upload, TransferAction.mirror).equals(choices.getItems()));
+            choices.setValue(TransferAction.mirror);
+            ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
+            return null;
+        });
+        final java.nio.file.Path remoteRoot = java.nio.file.Paths.get(remote);
+        final java.nio.file.Path localRoot = java.nio.file.Paths.get(local);
+        await("both folders have all files", () -> java.nio.file.Files.exists(remoteRoot.resolve("l.txt")) && java.nio.file.Files.exists(localRoot.resolve("r.txt")));
+        check("l.txt arrived on the server", "from local".equals(new String(java.nio.file.Files.readAllBytes(remoteRoot.resolve("l.txt")), java.nio.charset.StandardCharsets.UTF_8).trim()));
+        check("r.txt arrived on this computer", "from server".equals(new String(java.nio.file.Files.readAllBytes(localRoot.resolve("r.txt")), java.nio.charset.StandardCharsets.UTF_8).trim()));
+        await("the newer file wins", () -> -1 == java.nio.file.Files.mismatch(remoteRoot.resolve("both.txt"), localRoot.resolve("both.txt")));
+        check("the newer content is on both sides", "newer".equals(new String(java.nio.file.Files.readAllBytes(remoteRoot.resolve("both.txt")), java.nio.charset.StandardCharsets.UTF_8).trim()));
+        return String.format("SMOKE OK sync remote=%d local=%d", java.nio.file.Files.list(remoteRoot).count(), java.nio.file.Files.list(localRoot).count());
     }
 }

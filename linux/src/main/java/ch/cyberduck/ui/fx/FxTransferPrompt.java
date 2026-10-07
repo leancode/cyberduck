@@ -62,6 +62,11 @@ public class FxTransferPrompt implements TransferPrompt {
                 name = item.remote.getAbsolute();
         }
         final List<TransferAction> actions = new ArrayList<>(TransferAction.forTransfer(type));
+        if(Transfer.Type.sync == type) {
+            final TransferAction direction = dialogs.action(Messages.get("Synchronize"),
+                String.format("Choose how to synchronize %s with %s.", item.remote.getAbsolute(), item.local.getAbsolute()), actions);
+            return null == direction ? TransferAction.cancel : direction;
+        }
         final TransferAction selected = dialogs.action("File exists",
             String.format("The file %s already exists. Choose what action to take.", name), actions);
         return null == selected ? TransferAction.cancel : selected;

@@ -56,6 +56,8 @@ import ch.cyberduck.core.features.Location;
 import ch.cyberduck.core.worker.CreateDirectoryWorker;
 import ch.cyberduck.core.worker.DeleteWorker;
 import ch.cyberduck.core.worker.ListWorker;
+import ch.cyberduck.core.worker.CopyWorker;
+import ch.cyberduck.core.transfer.SyncTransfer;
 import ch.cyberduck.core.worker.MoveWorker;
 import ch.cyberduck.core.worker.MountWorker;
 import ch.cyberduck.ui.browser.DefaultBrowserFilter;
@@ -115,6 +117,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.stage.FileChooser;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 
@@ -326,6 +329,13 @@ public class BrowserController extends FxController {
         final MenuItem closeWindow = new MenuItem(Messages.get("Close Window"));
         closeWindow.setAccelerator(KeyCombination.keyCombination("Shortcut+W"));
         closeWindow.setOnAction(event -> this.close());
+        final MenuItem duplicate = new MenuItem(Messages.get("Duplicate File") + "…");
+        duplicate.setAccelerator(KeyCombination.keyCombination("Shortcut+D"));
+        duplicate.setOnAction(event -> this.duplicate());
+        duplicate.disableProperty().bind(Bindings.size(table.getSelectionModel().getSelectedItems()).isNotEqualTo(1));
+        final MenuItem synchronize = new MenuItem(Messages.get("Synchronize") + "…");
+        synchronize.setOnAction(event -> this.synchronize());
+        synchronize.disableProperty().bind(Bindings.createBooleanBinding(() -> null == rendered, renderedProperty));
         final MenuItem createVault = new MenuItem(Messages.get("Create Vault") + "…");
         createVault.setOnAction(event -> this.createVault());
         createVault.disableProperty().bind(Bindings.createBooleanBinding(() -> null == rendered, renderedProperty));
@@ -351,9 +361,71 @@ public class BrowserController extends FxController {
         showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
         showTransfers.setOnAction(event -> TransferController.get().show());
         menu = new MenuBar(
-            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
             new Menu(Messages.get("Window"), null, showTransfers));
         return menu;
+    }
+
+    /**
+     * Ask for a name and copy the selected file or folder on the server with that name
+     */
+    void duplicate() {
+        final Path selected = table.getSelectionModel().getSelectedItem();
+        if(null == selected || !this.isMounted() || null == workdir) {
+            return;
+        }
+        final String name = dialogs.input(Messages.get("Duplicate File"), Messages.get("Enter the name of the copy"),
+            String.format("%s %s", selected.getName(), Messages.get("copy")));
+        if(StringUtils.isBlank(name)) {
+            return;
+        }
+        this.duplicate(selected, new Path(selected.getParent(), StringUtils.trim(name), selected.getType()));
+    }
+
+    void duplicate(final Path source, final Path target) {
+        if(cache.get(source.getParent()).contains(target)
+            && DialogService.Confirmation.YES != dialogs.confirm(Messages.get("File exists"),
+            String.format(Messages.get("The file {0} exists. Do you want to overwrite it?").replace("{0}", "%s"), target.getName()),
+            Messages.get("Overwrite"), Messages.get("Cancel"), false)) {
+            return;
+        }
+        final Map<Path, Path> files = Collections.singletonMap(source, target);
+        // A stateful protocol needs a connection of its own, because the one of the browser is busy listing
+        final SessionPool destination = pool.getHost().getProtocol().getStatefulness() == Protocol.Statefulness.stateful
+            ? SessionPoolFactory.create(this, pool.getHost()) : pool;
+        this.background(new WorkerBackgroundAction<>(this, pool,
+            new CopyWorker(files, destination, cache, this, LoginCallbackFactory.get(this)) {
+                @Override
+                public void cleanup(final Map<Path, Path> result) {
+                    super.cleanup(result);
+                    selectAfterRender = target;
+                    reload();
+                }
+            }));
+    }
+
+    /**
+     * Ask for a folder on this computer and make it the same as the selected folder on the server, or the folder that
+     * is shown. The transfer asks what to do, upload, download or both.
+     */
+    void synchronize() {
+        if(!this.isMounted() || null == workdir) {
+            return;
+        }
+        final DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle(Messages.get("Synchronize"));
+        final File selected = chooser.showDialog(stage);
+        if(selected != null) {
+            this.synchronize(selected);
+        }
+    }
+
+    void synchronize(final File folder) {
+        final Path selected = table.getSelectionModel().getSelectedItem();
+        final Path remote = null != selected && selected.isDirectory() ? selected : workdir;
+        final Local local = LocalFactory.get(folder.getAbsolutePath());
+        log.debug("Synchronize {} with {}", remote, local);
+        this.transfer(new SyncTransfer(pool.getHost(), new TransferItem(remote, local)));
     }
 
     /**

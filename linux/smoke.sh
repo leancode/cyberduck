@@ -55,16 +55,32 @@ grep -qx 'connection.timeout.seconds=45' "$HOME/.duck/cyberduck.properties" || f
 grep -qx 'connection.retry=2' "$HOME/.duck/cyberduck.properties" || fail "preferences: the retries were not saved to cyberduck.properties"
 smoke '^SMOKE OK preferences-check timeout=45$' preferences-check
 
-# A Cryptomator vault: create it, unlock it, upload into it. The name and the text must not be readable on disk.
-# It has a home of its own, because the finished upload stays in the list of transfers of the next start.
+# The scenarios that start transfers have a home of their own, because a finished transfer stays in the list of
+# transfers of the next start, and the download scenario counts the transfers in the list.
 mkdir -p "$work/vault" "$work/home-vault/.duck"
 cp "$HOME/.duck/cyberduck.properties" "$work/home-vault/.duck/cyberduck.properties"
+
+# A Cryptomator vault: create it, unlock it, upload into it. The name and the text must not be readable on disk.
 echo "the amount due is 1234 francs" > "$work/invoice-2026.txt"
 HOME="$work/home-vault" smoke '^SMOKE OK vault listed=invoice-2026.txt ondisk=encrypted$' vault "$work/vault" "$work/invoice-2026.txt"
 [ -f "$work/vault/secret/masterkey.cryptomator" ] || fail "vault: no master key was written"
 ! grep -rl "invoice" "$work/vault" >/dev/null 2>&1 || fail "vault: the file name is on disk in clear text"
 ! grep -rl "1234 francs" "$work/vault" >/dev/null 2>&1 || fail "vault: the file content is on disk in clear text"
 ! find "$work/vault" -iname '*invoice*' | grep -q . || fail "vault: a file name on disk shows the clear text name"
+
+# A copy on the server with the Duplicate command
+mkdir -p "$work/dup" && echo hello > "$work/dup/f.txt"
+smoke '^SMOKE OK duplicate files=2$' duplicate "$work/dup"
+[ -f "$work/dup/f copy.txt" ] || fail "duplicate: the copy is not on disk"
+
+# Both directions: each side has a file the other lacks, and a file that is newer locally
+mkdir -p "$work/sync-remote" "$work/sync-local"
+echo "from server" > "$work/sync-remote/r.txt"
+echo "old" > "$work/sync-remote/both.txt"
+echo "from local" > "$work/sync-local/l.txt"
+sleep 2
+echo "newer" > "$work/sync-local/both.txt"
+HOME="$work/home-vault" smoke '^SMOKE OK sync remote=3 local=3$' sync "$work/sync-remote" "$work/sync-local"
 
 mkdir -p "$work/nav/a/b" && echo hello > "$work/nav/a/b/file.txt"
 smoke '^SMOKE OK navigate$' navigate "$work/nav"

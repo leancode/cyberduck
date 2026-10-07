@@ -1132,8 +1132,17 @@ later publishes packages.
   `ListWorker`, checks that neither the name nor the text is on disk, and locks it. The smoke mode `vault` does the
   same with the real dialogs (refused mismatch, prompt, upload through a transfer) and `smoke.sh` greps the vault folder
   for the name and the text. It runs with a home of its own, because the finished upload stays in the list of transfers.
-- [ ] **5.7 Synchronize and copy transfers**: `SyncTransfer` with its prompt UI, in-session copy via
+- [x] **5.7 Synchronize and copy transfers**: `SyncTransfer` with its prompt UI, in-session copy via
   `CopyWorker`. Proof: smoke `sync` between two local directories.
+  **Executor note**: done. File, Synchronize… asks for a folder on this computer and starts a `SyncTransfer` with the
+  selected folder on the server, or the folder that is shown. The prompt of the transfer is now headed "Synchronize"
+  and offers download, upload or both, where it used to say "File exists". File, Duplicate File… (Ctrl+D) asks for a name
+  and runs `CopyWorker` inside the session, after a confirmation when the name is taken. Proof: the smoke mode `sync`
+  has a file that only one side has on each side and a file that is newer locally, chooses "both" in the dialog and
+  requires every file on both sides with the newer content. The smoke mode `duplicate` makes `f copy.txt` and compares
+  the content. One unit test covers the wording and the choices of the sync prompt. Because a finished transfer stays in
+  the list of transfers of the next start, `smoke.sh` runs the vault and sync scenarios in a home of their own. The
+  download scenario counts the transfers in the list and failed when they shared one.
 - [ ] **5.8 Drag and drop**: drop files from the desktop onto the browser to upload. Proof: manual.
 - [ ] **5.9 Flatpak manifest** under `setup/flatpak/` built from the app image. Proof:
   `flatpak-builder` succeeds locally and `flatpak run io.cyberduck --version` prints the version.
