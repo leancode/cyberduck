@@ -179,6 +179,7 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
         for(Transfer.Type type : Transfer.Type.values()) {
             this.setDefault(String.format("factory.transferpromptcallback.%s.class", type.name()), FxTransferPrompt.class.getName());
         }
+        this.setDefault("factory.notification.class", NotifySendNotificationService.class.getName());
         // The keyring of the desktop. Falls back to the credentials file when secret-tool is not installed.
         this.setDefault("factory.passwordstore.class", SecretToolPasswordStore.class.getName());
     }

@@ -17,7 +17,10 @@ cleanup() {
 trap cleanup EXIT
 # Preferences, bookmarks and logs are written to the home folder. Never touch the real one.
 export HOME="$work/home"
-mkdir -p "$HOME"
+mkdir -p "$HOME/.duck"
+# Keep the passwords in the credentials file of the isolated home. The keyring of the machine may be locked and wait for
+# a prompt that no one answers.
+echo 'factory.passwordstore.class=ch.cyberduck.core.UnsecureHostPasswordStore' > "$HOME/.duck/cyberduck.properties"
 
 fail() {
     echo "SMOKE SCRIPT FAIL: $*" >&2
@@ -48,7 +51,13 @@ smoke '^SMOKE OK connect-fail ' connect-fail
 smoke '^SMOKE OK bookmarks$' bookmarks "$work/list"
 
 mkdir -p "$work/down-src" "$work/down-dst" && head -c 1048576 /dev/urandom > "$work/down-src/f.bin"
-smoke '^SMOKE OK download progress=[0-9]+$' download "$work/down-src" "$work/down-dst"
+# A stand-in for notify-send proves that the finished transfer reaches the desktop notification
+mkdir -p "$work/fakebin"
+printf '#!/bin/sh\nfor a in "$@"; do echo "$a" >> "%s"; done\n' "$work/notify.log" > "$work/fakebin/notify-send"
+chmod +x "$work/fakebin/notify-send"
+PATH="$work/fakebin:$PATH" smoke '^SMOKE OK download progress=[0-9]+$' download "$work/down-src" "$work/down-dst"
+grep -qx 'Download complete' "$work/notify.log" || fail "download: no notification was sent"
+echo "ok notified"
 [ "$(sha256sum < "$work/down-src/f.bin")" = "$(sha256sum < "$work/down-dst/f.bin")" ] || fail "download: checksum of the downloaded file differs"
 
 mkdir -p "$work/up-src" "$work/up-dst" && head -c 1048576 /dev/urandom > "$work/up-src/g.bin"
