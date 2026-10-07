@@ -100,6 +100,10 @@ public final class Smoke {
                     System.out.printf("SMOKE OK download progress=%d%n", download(browser, arguments.get(1), arguments.get(2)));
                     hold();
                     return 0;
+                case "upload":
+                    System.out.printf("SMOKE OK upload rows=%d%n", upload(browser, arguments.get(1), arguments.get(2)));
+                    hold();
+                    return 0;
                 case "bookmarks":
                     bookmarks(browser, arguments.get(1));
                     System.out.println("SMOKE OK bookmarks");
@@ -225,19 +229,67 @@ public final class Smoke {
             browser.getDownloadButton().fire();
             return null;
         });
-        await("file exists dialog", () -> onFx(() -> null != dialog()));
-        check("asks about the existing file", "File exists".equals(onFx(() -> dialog().getHeaderText())));
-        check("old content is still there while asking", "old local content".equals(new String(java.nio.file.Files.readAllBytes(copy), java.nio.charset.StandardCharsets.UTF_8)));
-        onFx(() -> {
-            final DialogPane pane = dialog();
-            @SuppressWarnings("unchecked") final javafx.scene.control.ComboBox<TransferAction> choices = (javafx.scene.control.ComboBox<TransferAction>) pane.lookup(".combo-box");
-            choices.setValue(TransferAction.overwrite);
-            ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
-            return null;
-        });
+        chooseAction(TransferAction.overwrite, () -> check("old content is still there while asking",
+            "old local content".equals(new String(java.nio.file.Files.readAllBytes(copy), java.nio.charset.StandardCharsets.UTF_8))));
         await("second download", () -> transfers.getCompleted() >= 2);
         check("overwritten with the remote content", -1 == java.nio.file.Files.mismatch(original, copy));
         return transfers.getProgressEvents();
+    }
+
+    interface Check {
+        void run() throws Exception;
+    }
+
+    /**
+     * Wait for the dialog that asks what to do with an existing file, run the check while it is open, choose the
+     * action and continue
+     */
+    static void chooseAction(final TransferAction action, final Check whileAsking) throws Exception {
+        await("file exists dialog", () -> onFx(() -> null != dialog()));
+        check("asks about the existing file", "File exists".equals(onFx(() -> dialog().getHeaderText())));
+        whileAsking.run();
+        onFx(() -> {
+            final DialogPane pane = dialog();
+            @SuppressWarnings("unchecked") final javafx.scene.control.ComboBox<TransferAction> choices = (javafx.scene.control.ComboBox<TransferAction>) pane.lookup(".combo-box");
+            choices.setValue(action);
+            ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
+            return null;
+        });
+    }
+
+    /**
+     * Upload <code>g.bin</code> from the source folder into the folder that is shown. Then change the remote file and
+     * upload again: the user is asked what to do with the existing file and chooses to overwrite it.
+     *
+     * @return Number of rows shown after the first upload
+     */
+    static int upload(final BrowserController browser, final String source, final String target) throws Exception {
+        mount(browser, target);
+        final java.io.File local = new java.io.File(source, "g.bin");
+        final java.nio.file.Path remote = java.nio.file.Paths.get(target, "g.bin");
+        final TransferController transfers = TransferController.get();
+
+        final int before = transfers.getCompleted();
+        onFx(() -> {
+            browser.upload(List.of(local));
+            return null;
+        });
+        await("first upload", () -> transfers.getCompleted() >= before + 1);
+        check("uploaded content is the same", -1 == java.nio.file.Files.mismatch(local.toPath(), remote));
+        // The folder is listed again after the transfer
+        await("uploaded file shown", () -> names(browser).contains("g.bin"));
+        final int rows = names(browser).size();
+
+        java.nio.file.Files.write(remote, "old remote content".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        onFx(() -> {
+            browser.upload(List.of(local));
+            return null;
+        });
+        chooseAction(TransferAction.overwrite, () -> check("old content is still there while asking",
+            "old remote content".equals(new String(java.nio.file.Files.readAllBytes(remote), java.nio.charset.StandardCharsets.UTF_8))));
+        await("second upload", () -> transfers.getCompleted() >= before + 2);
+        check("overwritten with the local content", -1 == java.nio.file.Files.mismatch(local.toPath(), remote));
+        return rows;
     }
 
     /**
