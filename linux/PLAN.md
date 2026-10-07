@@ -1144,6 +1144,12 @@ later publishes packages.
   the list of transfers of the next start, `smoke.sh` runs the vault and sync scenarios in a home of their own. The
   download scenario counts the transfers in the list and failed when they shared one.
 - [ ] **5.8 Drag and drop**: drop files from the desktop onto the browser to upload. Proof: manual.
+  **Executor note (not ticked)**: implemented, proof still open. The table and its rows accept files dragged from the
+  desktop (`TransferMode.COPY`) while connected. A drop on a folder row uploads into that folder, a drop anywhere else
+  uploads into the folder that is shown, both through the same `upload` that the Upload button uses (its smoke scenario
+  passes). A drop cannot be made from outside the toolkit, because a `Dragboard` can only be created by a real drag
+  gesture. So the plan's manual proof is still to do: drag a file from the file manager onto the window and onto a folder
+  row and see the transfer.
 - [ ] **5.9 Flatpak manifest** under `setup/flatpak/` built from the app image. Proof:
   `flatpak-builder` succeeds locally and `flatpak run io.cyberduck --version` prints the version.
 - [ ] **5.10 Add `linux-gui.yml` smoke suite to branch protection** as a required check (operator action).

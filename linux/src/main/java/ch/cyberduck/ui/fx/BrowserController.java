@@ -108,9 +108,11 @@ import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.input.DragEvent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -247,8 +249,14 @@ public class BrowserController extends FxController {
                     this.open(row.getItem());
                 }
             });
+            // Files dropped on a folder go into the folder
+            row.setOnDragOver(event -> this.acceptDrag(event));
+            row.setOnDragDropped(event -> this.drop(event, !row.isEmpty() && row.getItem().isDirectory() ? row.getItem() : null));
             return row;
         });
+        // Files dropped anywhere else go into the folder that is shown
+        table.setOnDragOver(event -> this.acceptDrag(event));
+        table.setOnDragDropped(event -> this.drop(event, null));
         table.setOnKeyPressed(event -> {
             if(event.getCode() == KeyCode.ENTER) {
                 final Path selected = table.getSelectionModel().getSelectedItem();
@@ -915,11 +923,18 @@ public class BrowserController extends FxController {
      * Upload files to the selected folder or else the folder that is shown
      */
     void upload(final List<File> files) {
+        this.upload(files, null);
+    }
+
+    /**
+     * @param folder Where to put the files or null for the selected folder or else the folder that is shown
+     */
+    void upload(final List<File> files, final Path folder) {
         if(!this.isMounted() || null == workdir || files.isEmpty()) {
             return;
         }
         final Host host = pool.getHost();
-        final Path destination = new UploadTargetFinder(workdir).find(table.getSelectionModel().getSelectedItem());
+        final Path destination = null != folder ? folder : new UploadTargetFinder(workdir).find(table.getSelectionModel().getSelectedItem());
         final List<TransferItem> uploads = new ArrayList<>();
         for(File file : files) {
             final Local local = LocalFactory.get(file.getAbsolutePath());
@@ -928,6 +943,28 @@ public class BrowserController extends FxController {
         }
         log.debug("Upload {} to {}", uploads, destination);
         this.transfer(new UploadTransfer(host, uploads));
+    }
+
+    private void acceptDrag(final DragEvent event) {
+        if(this.isMounted() && event.getDragboard().hasFiles()) {
+            event.acceptTransferModes(TransferMode.COPY);
+        }
+        event.consume();
+    }
+
+    /**
+     * Upload the files that were dropped from the desktop
+     *
+     * @param folder Folder that the files were dropped on or null for the folder that is shown
+     */
+    private void drop(final DragEvent event, final Path folder) {
+        boolean completed = false;
+        if(this.isMounted() && event.getDragboard().hasFiles()) {
+            this.upload(event.getDragboard().getFiles(), folder);
+            completed = true;
+        }
+        event.setDropCompleted(completed);
+        event.consume();
     }
 
     private void transfer(final Transfer transfer) {
