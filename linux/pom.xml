@@ -31,6 +31,7 @@
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
         <javafx.version>25.0.4</javafx.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
         <!-- Only build on Linux. The profile below switches this on. -->
         <maven.main.skip>true</maven.main.skip>
         <maven.test.skip>true</maven.test.skip>
@@ -121,6 +122,12 @@
                     <type>pom</type>
                     <scope>test</scope>
                     <version>${project.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.testcontainers</groupId>
+                    <artifactId>testcontainers</artifactId>
+                    <version>${testcontainers.version}</version>
+                    <scope>test</scope>
                 </dependency>
             </dependencies>
         </profile>
