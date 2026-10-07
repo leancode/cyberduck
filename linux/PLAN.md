@@ -977,7 +977,7 @@ later publishes packages.
 
   **Commit**: `Upload and install-test Linux packages in workflow.`
 
-- [ ] **4.6 Wire into the release pipeline**
+- [x] **4.6 Wire into the release pipeline**
 
   **Do**
   - `deploy.yml`: in the `--projects` map, change the Linux entry to
@@ -994,6 +994,20 @@ later publishes packages.
   runners and release secrets.
 
   **Commit**: `Publish Linux GUI packages with releases.`
+
+  **Done (executor notes)**
+  - `deploy.yml`: the Linux entry of the `--projects` map is `i18n,profiles,cli/linux,linux`. The two Linux archive steps and the
+    attestation step now list `linux/target/release/*.deb` and `*.rpm` next to the CLI ones. The packaging tools step already installs
+    `rpm` and `fakeroot`. The package names differ from the CLI ones (`cyberduck_...` and `cyberduck-...` against `duck_...` and
+    `duck-...`), so the artifacts do not collide, including the arm64 leg.
+  - `release.yml`: a new step `Download Linux GUI` (pattern `{cyberduck_*,cyberduck-*}`) and two more lines in the `files` of the
+    `Publish Release` step.
+  - `linux/pom.xml` sets `maven.deploy.skip` to `true`, because the `deploy` goal of the release run would otherwise publish the jar of the
+    application to the Maven repository next to the libraries. The application is distributed as packages.
+  - `actionlint` reports the same 15 findings on `deploy.yml` and `release.yml` before and after the change (an unknown permission scope
+    newer than the linter, and case sensitive `inputs[...]` names), so none come from this change. `linux-gui.yml` has none.
+  - As the plan said, this cannot be proven from a branch: the workflows use self-hosted runners and release secrets. Check the next real
+    release run: the Linux legs should upload `cyberduck_*.deb` and `cyberduck-*.rpm`, and the GitHub release should list them.
 
 - [ ] **4.7 Documentation**
 

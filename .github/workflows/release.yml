@@ -164,6 +164,13 @@ jobs:
           path: release
           merge-multiple: true
 
+      - name: Download Linux GUI
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '{cyberduck_*,cyberduck-*}'
+          path: release
+          merge-multiple: true
+
       - name: Publish Release
         uses: softprops/action-gh-release@v3
         with:
@@ -183,6 +190,8 @@ jobs:
             release/duck-*.msi
             release/duck_*.deb
             release/duck-*.rpm
+            release/cyberduck_*.deb
+            release/cyberduck-*.rpm
             release/duck-*.tar.gz
 
   # Push to the Chocolatey community repository. Release only, so it lives here

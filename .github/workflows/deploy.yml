@@ -125,7 +125,7 @@ jobs:
           mvn --settings .github/maven-settings.xml --batch-mode
           ${{ inputs.MAVEN_GOAL }}
           -DskipTests -DskipITs -P"${{ inputs['MAVEN_PROFILES'] }}"
-          --also-make --projects ${{ fromJSON('{"Linux":"i18n,profiles,cli/linux","Windows":"i18n,profiles,windows,cli/windows","macOS":"i18n,profiles,osx,cli/osx"}')[runner.os] }}
+          --also-make --projects ${{ fromJSON('{"Linux":"i18n,profiles,cli/linux,linux","Windows":"i18n,profiles,windows,cli/windows","macOS":"i18n,profiles,osx,cli/osx"}')[runner.os] }}
         env:
           MAVEN_CYBERDUCK_USERNAME: ${{ secrets.MAVEN_CYBERDUCK_USERNAME }}
           MAVEN_CYBERDUCK_PASSWORD: ${{ secrets.MAVEN_CYBERDUCK_PASSWORD }}
@@ -250,6 +250,7 @@ jobs:
           archive: false
           path: |-
             cli/linux/target/release/*.deb
+            linux/target/release/*.deb
       - name: Archive RPM (Linux)
         if: runner.os == 'linux'
         uses: actions/upload-artifact@v7
@@ -257,6 +258,7 @@ jobs:
           archive: false
           path: |-
             cli/linux/target/release/*.rpm
+            linux/target/release/*.rpm
 
       # Sign SLSA build provenance for the distributed files so downloads can be
       # checked with `gh attestation verify <file> --repo iterate-ch/cyberduck`.
@@ -288,6 +290,8 @@ jobs:
           subject-path: |-
             cli/linux/target/release/*.deb
             cli/linux/target/release/*.rpm
+            linux/target/release/*.deb
+            linux/target/release/*.rpm
 
       - name: Cleanup Developer ID certificate
         if: always()
