@@ -49,6 +49,12 @@ smoke '^SMOKE OK locale refresh=Refresh$' locale "$work/list"
 LANGUAGE=de smoke '^SMOKE OK locale refresh=Aktualisieren$' locale "$work/list"
 LANGUAGE=xx:fr:de smoke '^SMOKE OK locale refresh=Actualiser$' locale "$work/list"
 
+# A change in the preferences window is saved at once and the next start shows it
+smoke '^SMOKE OK preferences$' preferences
+grep -qx 'connection.timeout.seconds=45' "$HOME/.duck/cyberduck.properties" || fail "preferences: the timeout was not saved to cyberduck.properties"
+grep -qx 'connection.retry=2' "$HOME/.duck/cyberduck.properties" || fail "preferences: the retries were not saved to cyberduck.properties"
+smoke '^SMOKE OK preferences-check timeout=45$' preferences-check
+
 mkdir -p "$work/nav/a/b" && echo hello > "$work/nav/a/b/file.txt"
 smoke '^SMOKE OK navigate$' navigate "$work/nav"
 

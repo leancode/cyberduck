@@ -105,6 +105,13 @@ public final class Smoke {
                     System.out.printf("SMOKE OK locale refresh=%s%n", onFx(() -> browser.getRefresh().getText()));
                     hold();
                     return 0;
+                case "preferences":
+                    preferences(browser);
+                    System.out.println("SMOKE OK preferences");
+                    return 0;
+                case "preferences-check":
+                    System.out.printf("SMOKE OK preferences-check timeout=%s%n", preferencesCheck(browser));
+                    return 0;
                 case "connect":
                     System.out.printf("SMOKE OK connect %d%n", connect(browser, arguments.get(1)));
                     hold();
@@ -967,5 +974,42 @@ public final class Smoke {
         finally {
             pool.shutdown();
         }
+    }
+
+    /**
+     * Open the preferences window from the menu like a user and wait until it is showing
+     */
+    private static PreferencesController openPreferences(final BrowserController browser) throws Exception {
+        onFx(() -> {
+            browser.getMenuBar().getMenus().get(0).getItems().stream().filter(i -> "Preferences…".equals(i.getText())).findFirst().orElseThrow().fire();
+            return null;
+        });
+        await("preferences window", () -> onFx(() -> null != PreferencesController.get().getStage() && PreferencesController.get().getStage().isShowing()));
+        return PreferencesController.get();
+    }
+
+    /**
+     * Change values in the preferences window. They are saved when changed.
+     */
+    private static void preferences(final BrowserController browser) throws Exception {
+        final PreferencesController window = openPreferences(browser);
+        onFx(() -> {
+            window.getTimeout().getValueFactory().setValue(45);
+            window.getRetries().getValueFactory().setValue(2);
+            window.getStage().close();
+            return null;
+        });
+    }
+
+    /**
+     * @return Timeout shown in the preferences window after a restart
+     */
+    private static int preferencesCheck(final BrowserController browser) throws Exception {
+        final PreferencesController window = openPreferences(browser);
+        return onFx(() -> {
+            final int timeout = window.getTimeout().getValue();
+            window.getStage().close();
+            return timeout;
+        });
     }
 }

@@ -18,6 +18,7 @@ package ch.cyberduck.ui.fx;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.ProtocolFactory;
+import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.exception.HostParserException;
 
 import org.apache.commons.lang3.StringUtils;
@@ -105,7 +106,7 @@ public class ConnectionDialog extends Dialog<Host> {
         protocol.setCellFactory(list -> new ProtocolCell());
         protocol.setButtonCell(new ProtocolCell());
         protocol.valueProperty().addListener((observable, previous, selected) -> this.configure(selected));
-        final Protocol preferred = protocols.forName("sftp");
+        final Protocol preferred = protocols.forName(PreferencesFactory.get().getProperty("connection.protocol.default"));
         protocol.setValue(null != preferred ? preferred : protocol.getItems().stream().findFirst().orElse(null));
         if(initial != null) {
             this.prefill(initial);

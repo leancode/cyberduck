@@ -1090,9 +1090,21 @@ later publishes packages.
   `refresh=Actualiser`. A screenshot in German shows the toolbar, menu and columns translated and nothing cut off. The
   window's minimum width follows the toolbar but never exceeds the screen. `smoke.sh` now pins `LC_ALL=C.UTF-8` and
   unsets `LANGUAGE` so that a developer's own language does not break the English checks.
-- [ ] **5.4 Preferences window**: General (download folder, default protocol), Transfers (concurrent
+- [x] **5.4 Preferences window**: General (download folder, default protocol), Transfers (concurrent
   transfers, overwrite policy), Connection (timeout, proxy). Proof: change a value, restart, value
   persisted (`cyberduck.properties` diff).
+  **Executor note**: done. File, Preferences… (Ctrl+comma) opens `PreferencesController` with three tabs. General: download
+  folder (`queue.download.folder`, with a folder chooser, empty restores the default), show hidden files
+  (`browser.showHidden`) and default protocol (`connection.protocol.default`, which the connection dialog now uses
+  instead of a fixed `sftp`; the Linux default stays `sftp`). Transfers: what to do when a file to download or upload
+  exists (`queue.download.action`, `queue.upload.action`, "ask" or one of the transfer actions) and how to transfer
+  (`queue.transfer.type`). Connection: timeout (`connection.timeout.seconds`), retries (`connection.retry`) and the
+  proxy of the system (`connection.proxy.enable`). There is no Apply button. Every change is written to
+  `~/.duck/cyberduck.properties` when it is made, and typed spinner values are taken over when the field loses focus.
+  Proof: 2 tests that drive the real controls and read the file with a second `LinuxApplicationPreferences`, and the
+  smoke modes `preferences` (opens the window from the menu, sets timeout 45 and retries 2) and `preferences-check`
+  (second start shows 45), with `smoke.sh` grepping `connection.timeout.seconds=45` and `connection.retry=2` in the
+  file between them. The layout of this window has not been looked at by a person yet.
 - [ ] **5.5 Info panel**: size, permissions (`UnixPermission` feature when present), modification
   date, URL (`UrlProvider`). Proof: smoke `info` reports the size of a known file.
 - [ ] **5.6 Cryptomator vaults**: Create Vault (`CreateVaultWorker`) and open an existing vault
