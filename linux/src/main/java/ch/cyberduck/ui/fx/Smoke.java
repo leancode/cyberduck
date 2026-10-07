@@ -21,6 +21,8 @@ import ch.cyberduck.core.DisabledListProgressListener;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathCache;
+import ch.cyberduck.core.Protocol;
+import ch.cyberduck.core.ProtocolFactory;
 import ch.cyberduck.core.SessionPoolFactory;
 import ch.cyberduck.core.nio.LocalProtocol;
 import ch.cyberduck.core.pool.SessionPool;
@@ -82,6 +84,10 @@ public final class Smoke {
                     return 0;
                 case "list":
                     System.out.printf("SMOKE OK list %d%n", list(browser, arguments.get(1)));
+                    hold();
+                    return 0;
+                case "connect":
+                    System.out.printf("SMOKE OK connect %d%n", connect(browser, arguments.get(1)));
                     hold();
                     return 0;
                 case "navigate":
@@ -147,6 +153,30 @@ public final class Smoke {
             return null;
         });
         awaitRendered(browser, directory);
+    }
+
+    /**
+     * Open the connection dialog, choose the local filesystem, type the folder and press connect
+     *
+     * @return Number of rows in the table
+     */
+    static int connect(final BrowserController browser, final String directory) throws Exception {
+        onFx(() -> {
+            Platform.runLater(browser::connect);
+            return null;
+        });
+        await("connection dialog", () -> onFx(() -> null != browser.getConnectionDialog() && browser.getConnectionDialog().isShowing()));
+        onFx(() -> {
+            final ConnectionDialog dialog = browser.getConnectionDialog();
+            final Protocol local = ProtocolFactory.get().forName("file");
+            check("local protocol available", null != local);
+            dialog.getProtocolBox().setValue(local);
+            dialog.getPathField().setText(directory);
+            dialog.getConnectButton().fire();
+            return null;
+        });
+        awaitRendered(browser, directory);
+        return onFx(() -> browser.getTable().getItems().size());
     }
 
     static void awaitRendered(final BrowserController browser, final String directory) throws Exception {

@@ -18,16 +18,31 @@ package ch.cyberduck.ui.fx;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import javafx.util.Duration;
 
 public class CyberduckApplication extends Application {
     private static final Logger log = LogManager.getLogger(CyberduckApplication.class);
+
+    /**
+     * Close all windows including open dialogs, then end the application. Calling {@link Platform#exit()} while a dialog
+     * is waiting in its nested event loop crashes the JVM, so the dialogs are hidden first.
+     */
+    public static void quit() {
+        for(Window window : new ArrayList<>(Window.getWindows())) {
+            if(window.isShowing()) {
+                window.hide();
+            }
+        }
+        Platform.runLater(Platform::exit);
+    }
 
     @Override
     public void init() {
@@ -45,7 +60,7 @@ public class CyberduckApplication extends Application {
             final double seconds = Double.parseDouble(arguments.get(exit + 1));
             log.info("Exit after {} seconds", seconds);
             final PauseTransition timer = new PauseTransition(Duration.seconds(seconds));
-            timer.setOnFinished(event -> Platform.exit());
+            timer.setOnFinished(event -> quit());
             timer.play();
         }
         final int smoke = arguments.indexOf("--smoke");
