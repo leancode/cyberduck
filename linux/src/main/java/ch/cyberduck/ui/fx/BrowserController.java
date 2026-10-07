@@ -45,7 +45,11 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayDeque;
 import java.util.Comparator;
+import java.util.Deque;
+import java.util.EnumSet;
+import java.util.function.Function;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyObjectWrapper;
@@ -56,11 +60,15 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -89,6 +97,9 @@ public class BrowserController extends FxController {
     private final TableView<Path> table = new TableView<>();
     private final ObservableList<Path> rows = FXCollections.observableArrayList();
     private final Label status = new Label();
+    private final Button back = new Button("Back");
+    private final Button up = new Button("Up");
+    private final Button refresh = new Button("Refresh");
     private final StringProperty summary = new SimpleStringProperty(StringUtils.EMPTY);
 
     private final Cache<Path> cache = new PathCache(preferences.getInteger("browser.cache.size"));
@@ -110,6 +121,14 @@ public class BrowserController extends FxController {
      * Directory shown in the table
      */
     private Path rendered;
+    /**
+     * Directory requested but not yet listed. Used to ignore a listing that has been superseded.
+     */
+    private Path pending;
+    /**
+     * Previously shown directories for the back button
+     */
+    private final Deque<Path> history = new ArrayDeque<>();
 
     public BrowserController(final Stage stage) {
         this.stage = stage;
@@ -118,15 +137,35 @@ public class BrowserController extends FxController {
     }
 
     private BorderPane build() {
-        location.setEditable(false);
+        back.setOnAction(event -> this.back());
+        up.setOnAction(event -> this.up());
+        refresh.setOnAction(event -> this.reload());
+        location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, location);
+        final HBox top = new HBox(8, back, up, refresh, location);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
 
         table.setItems(rows);
         table.setPlaceholder(new Label());
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        table.setRowFactory(view -> {
+            final TableRow<Path> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if(event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2 && !row.isEmpty()) {
+                    this.open(row.getItem());
+                }
+            });
+            return row;
+        });
+        table.setOnKeyPressed(event -> {
+            if(event.getCode() == KeyCode.ENTER) {
+                final Path selected = table.getSelectionModel().getSelectedItem();
+                if(selected != null) {
+                    this.open(selected);
+                }
+            }
+        });
         table.getColumns().add(this.column("Filename", 360, new FilenameComparator(true), p -> {
             final String name = p.getName();
             return p.isDirectory() ? String.format("%s%s", name, Path.DELIMITER) : name;
@@ -162,11 +201,12 @@ public class BrowserController extends FxController {
         final BorderPane root = new BorderPane(table);
         root.setTop(top);
         root.setBottom(bottom);
+        this.updateNavigation();
         return root;
     }
 
     private TableColumn<Path, Path> column(final String title, final double width, final Comparator<Path> comparator,
-                                           final java.util.function.Function<Path, String> text, final Pos alignment) {
+                                           final Function<Path, String> text, final Pos alignment) {
         final TableColumn<Path, Path> column = new TableColumn<>(title);
         column.setPrefWidth(width);
         column.setComparator(comparator);
@@ -256,6 +296,9 @@ public class BrowserController extends FxController {
                 BrowserController.this.pool = SessionPool.DISCONNECTED;
                 cache.clear();
                 workdir = null;
+                pending = null;
+                history.clear();
+                updateNavigation();
                 rendered = null;
                 rows.clear();
                 summary.set(StringUtils.EMPTY);
@@ -267,27 +310,115 @@ public class BrowserController extends FxController {
     }
 
     /**
-     * Show the contents of a directory. Lists the directory from the server if it is not in the cache.
+     * Show the contents of a directory and remember the previous directory for the back button. Lists the directory
+     * from the server if it is not in the cache.
      *
      * @param directory Folder to display
      */
     public void setWorkdir(final Path directory) {
+        this.navigate(directory, true);
+    }
+
+    private void navigate(final Path directory, final boolean remember) {
         log.debug("Set working directory to {}", directory);
-        workdir = directory;
-        location.setText(directory.getAbsolute());
+        pending = directory;
+        final Path previous = workdir;
         if(cache.isValid(directory)) {
-            this.render(directory);
+            this.show(directory, previous, remember);
             return;
         }
         this.background(new WorkerBackgroundAction<>(this, pool, new ListWorker(cache, directory, listener) {
             @Override
             public void cleanup(final AttributedList<Path> list) {
                 super.cleanup(list);
-                if(directory.equals(workdir)) {
-                    render(directory);
+                if(!directory.equals(pending)) {
+                    log.debug("Ignore superseded listing of {}", directory);
+                    return;
+                }
+                if(AttributedList.<Path>emptyList() == list) {
+                    // Listing failed. Keep showing the previous directory.
+                    pending = null;
+                    location.setText(null == previous ? StringUtils.EMPTY : previous.getAbsolute());
+                }
+                else {
+                    show(directory, previous, remember);
                 }
             }
         }));
+    }
+
+    private void show(final Path directory, final Path previous, final boolean remember) {
+        if(remember && null != previous && !previous.equals(directory)) {
+            history.push(previous);
+        }
+        pending = null;
+        workdir = directory;
+        location.setText(directory.getAbsolute());
+        this.render(directory);
+        this.updateNavigation();
+    }
+
+    private void updateNavigation() {
+        back.setDisable(history.isEmpty());
+        up.setDisable(null == workdir || workdir.isRoot());
+        refresh.setDisable(null == workdir);
+        location.setDisable(null == workdir);
+    }
+
+    /**
+     * Open a folder. Files are not opened yet.
+     */
+    void open(final Path file) {
+        if(file.isDirectory()) {
+            this.setWorkdir(file);
+        }
+    }
+
+    /**
+     * Show the parent directory
+     */
+    void up() {
+        if(null != workdir && !workdir.isRoot()) {
+            this.setWorkdir(workdir.getParent());
+        }
+    }
+
+    /**
+     * Show the previously shown directory
+     */
+    void back() {
+        if(!history.isEmpty()) {
+            this.navigate(history.pop(), false);
+            this.updateNavigation();
+        }
+    }
+
+    /**
+     * Show the directory typed in the location field. Relative paths are relative to the current directory.
+     */
+    void go(final String input) {
+        String typed = StringUtils.trimToEmpty(input);
+        if(typed.isEmpty() || null == workdir) {
+            return;
+        }
+        if(typed.length() > 1) {
+            typed = StringUtils.removeEnd(typed, String.valueOf(Path.DELIMITER));
+        }
+        this.setWorkdir(typed.startsWith(String.valueOf(Path.DELIMITER))
+            ? new Path(typed, EnumSet.of(Path.Type.directory))
+            : new Path(workdir, typed, EnumSet.of(Path.Type.directory)));
+    }
+
+    Button getBackButton() {
+        return back;
+    }
+
+    Button getUpButton() {
+        return up;
+    }
+
+    TextField getLocation() {
+        return location;
     }
 
     /**
@@ -296,7 +427,7 @@ public class BrowserController extends FxController {
     public void reload() {
         if(null != workdir) {
             cache.invalidate(workdir);
-            this.setWorkdir(workdir);
+            this.navigate(workdir, false);
         }
     }
 

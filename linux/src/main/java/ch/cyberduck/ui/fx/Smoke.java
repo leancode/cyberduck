@@ -30,11 +30,18 @@ import ch.cyberduck.core.worker.ListWorker;
 
 import java.util.EnumSet;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 
 import javafx.application.Platform;
+import javafx.event.ActionEvent;
+import javafx.event.Event;
+import javafx.scene.Node;
+import javafx.scene.control.TableRow;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 
 /**
  * Scripted scenarios run against the local filesystem without a server. Started with
@@ -75,6 +82,11 @@ public final class Smoke {
                     return 0;
                 case "list":
                     System.out.printf("SMOKE OK list %d%n", list(browser, arguments.get(1)));
+                    hold();
+                    return 0;
+                case "navigate":
+                    navigate(browser, arguments.get(1));
+                    System.out.println("SMOKE OK navigate");
                     hold();
                     return 0;
                 default:
@@ -120,14 +132,100 @@ public final class Smoke {
      * @return Number of rows in the table
      */
     static int list(final BrowserController browser, final String directory) throws Exception {
+        mount(browser, directory);
+        return onFx(() -> browser.getTable().getItems().size());
+    }
+
+    /**
+     * Mount the local filesystem at the directory and wait until the table shows it
+     */
+    static void mount(final BrowserController browser, final String directory) throws Exception {
         final Host host = new Host(new LocalProtocol(), new LocalProtocol().getDefaultHostname());
         host.setDefaultPath(directory);
         onFx(() -> {
             browser.mount(host);
             return null;
         });
-        await("directory listed", () -> onFx(() -> null != browser.getRendered() && directory.equals(browser.getRendered().getAbsolute())));
-        return onFx(() -> browser.getTable().getItems().size());
+        awaitRendered(browser, directory);
+    }
+
+    static void awaitRendered(final BrowserController browser, final String directory) throws Exception {
+        await(String.format("directory %s shown", directory), () -> onFx(() -> null != browser.getRendered() && directory.equals(browser.getRendered().getAbsolute())));
+    }
+
+    static List<String> names(final BrowserController browser) throws Exception {
+        return onFx(() -> browser.getTable().getItems().stream().map(Path::getName).collect(Collectors.toList()));
+    }
+
+    /**
+     * Send a double click to the table row with the given name, like a user would
+     */
+    static void doubleClick(final BrowserController browser, final String name) throws Exception {
+        await(String.format("row %s", name), () -> onFx(() -> null != row(browser, name)));
+        onFx(() -> {
+            final TableRow<?> row = row(browser, name);
+            Event.fireEvent(row, new MouseEvent(MouseEvent.MOUSE_CLICKED, 1, 1, 1, 1, MouseButton.PRIMARY, 2,
+                false, false, false, false, true, false, false, true, false, false, null));
+            return null;
+        });
+    }
+
+    private static TableRow<?> row(final BrowserController browser, final String name) {
+        for(Node node : browser.getTable().lookupAll(".table-row-cell")) {
+            if(node instanceof TableRow<?> row && !row.isEmpty() && row.getItem() instanceof Path path && path.getName().equals(name)) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Walk down two levels with double clicks, up with the Up button, type a path and go back
+     */
+    static void navigate(final BrowserController browser, final String directory) throws Exception {
+        mount(browser, directory);
+        doubleClick(browser, "a");
+        awaitRendered(browser, directory + "/a");
+        doubleClick(browser, "b");
+        awaitRendered(browser, directory + "/a/b");
+        check("file.txt shown in a/b", List.of("file.txt").equals(names(browser)));
+        onFx(() -> {
+            browser.getUpButton().fire();
+            return null;
+        });
+        awaitRendered(browser, directory + "/a");
+        onFx(() -> {
+            browser.getUpButton().fire();
+            return null;
+        });
+        awaitRendered(browser, directory);
+        // Typed path
+        onFx(() -> {
+            browser.getLocation().setText(directory + "/a/b");
+            browser.getLocation().fireEvent(new ActionEvent());
+            return null;
+        });
+        awaitRendered(browser, directory + "/a/b");
+        // Back to the directory shown before the typed path
+        onFx(() -> {
+            browser.getBackButton().fire();
+            return null;
+        });
+        awaitRendered(browser, directory);
+        // A directory that cannot be listed leaves the previous one in place
+        onFx(() -> {
+            browser.getLocation().setText(directory + "/missing");
+            browser.getLocation().fireEvent(new ActionEvent());
+            return null;
+        });
+        await("location restored after failed listing", () -> onFx(() -> directory.equals(browser.getLocation().getText())));
+        check("directory still shown after failed listing", directory.equals(onFx(() -> browser.getRendered().getAbsolute())));
+    }
+
+    static void check(final String description, final boolean condition) {
+        if(!condition) {
+            throw new IllegalStateException(String.format("Check failed: %s", description));
+        }
     }
 
     /**
