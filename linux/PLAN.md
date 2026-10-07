@@ -885,7 +885,7 @@ later publishes packages.
     An invalid URL shows the error dialog `Invalid URL`. Smoke `url` opens `file:///<folder>` (this protocol has no host, so the
     form is `file:///path`, not `file://localhost/path`) and then `sftp://`, which must produce the dialog.
 
-- [ ] **4.3 `.deb` package**
+- [x] **4.3 `.deb` package**
 
   **Do**
   - Add the `deb` antcall. Create `setup/deb/cyberduck.control`, `cyberduck.postinstall`,
@@ -906,6 +906,25 @@ later publishes packages.
   ```
 
   **Commit**: `Build Debian package for Linux GUI.`
+
+  **Done (executor notes)**
+  - The package is `linux/target/release/cyberduck_9.6.0.0_amd64.deb` (about 240 MB installed). It is built in `build.xml`
+    before the app image. The install test in a clean container found two defects that the proof on a developer machine hides:
+    1. jpackage works out the dependencies by scanning native libraries, but JavaFX keeps its natives inside its jars, so the
+       list had no GTK. `--linux-package-deps "libgtk-3-0t64 | libgtk-3-0, libgl1"` adds it. The generated list also contains the
+       library names of the build machine (for example `libasound2t64`), so the deb is built and installed on Ubuntu 24.04.
+    2. jpackage's own post-install script runs `xdg-desktop-menu install`, which fails with `No writable system menu directory
+       found` (exit 3) on a machine without a desktop environment and leaves the package half-configured. The custom
+       `setup/linux/cyberduck.postinst` and `cyberduck.prerm` (copies of the defaults) link the menu entry into
+       `/usr/share/applications`, run `update-desktop-database` when it exists, and link the command `/usr/bin/cyberduck`.
+       They are removed again only on `remove`, not on upgrade. jpackage replaces its own token names even inside shell
+       comments, so the comments do not mention them.
+  - Proof output: `dpkg-deb -I` shows `Package: cyberduck`, `Version: 9.6.0.0` and the GTK dependency. On this machine
+    `dpkg -i`, then `CYBERDUCK_BIN=cyberduck xvfb-run -a linux/smoke.sh` passed all 13 scenarios against the installed package, and
+    `dpkg --remove` removed `/usr/bin/cyberduck`, the menu entry and `/opt/cyberduck`. In a clean `ubuntu:24.04` container
+    `apt-get install ./cyberduck_*.deb xvfb` installed 145 packages, `cyberduck --version` printed `Cyberduck 9.6.0-SNAPSHOT`,
+    `xvfb-run -a cyberduck --smoke list` printed `SMOKE OK list 2`, and `apt-get remove` cleaned up. In this sandbox that test
+    needs about 15 minutes for the downloads. Docker Hub is rate limited, so the image came from `mirror.gcr.io/library/ubuntu:24.04`.
 
 - [ ] **4.4 `.rpm` package**
 
