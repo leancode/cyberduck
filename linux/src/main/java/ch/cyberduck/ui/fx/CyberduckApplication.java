@@ -32,6 +32,12 @@ public class CyberduckApplication extends Application {
     private static final Logger log = LogManager.getLogger(CyberduckApplication.class);
 
     @Override
+    public void init() {
+        // Not on the JavaFX application thread
+        Bootstrap.loadBookmarks();
+    }
+
+    @Override
     public void start(final Stage stage) {
         stage.setTitle("Cyberduck");
         stage.setScene(new Scene(new BorderPane(), 900, 600));

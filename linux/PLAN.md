@@ -209,7 +209,7 @@ Read these before every session.
   - Added `XdgOpenBrowserLauncher` instead of the AWT-based `DesktopBrowserLauncher`, to avoid loading AWT/GTK next to JavaFX.
   - Tests: `Tests run: 5, Failures: 0, Errors: 0`.
 
-- [ ] **1.4 Bootstrap: preferences, protocols, profiles, bookmarks**
+- [x] **1.4 Bootstrap: preferences, protocols, profiles, bookmarks**
 
   **Do**
   - In `MainApplication.main`, before anything else: `PreferencesFactory.set(new LinuxApplicationPreferences())`.
@@ -228,12 +228,23 @@ Read these before every session.
   **Proof**
   ```bash
   mvn -q -pl linux -DskipSign -Drevision=0 compile
-  linux/run.sh --list-protocols | tee /tmp/protocols.txt | wc -l      # more than 20 lines
+  linux/run.sh --list-protocols | tee /tmp/protocols.txt | wc -l      # 24 lines, one per bundled profile
   grep -E "^(sftp|ftp|s3|file|dav)" /tmp/protocols.txt                 # at least sftp, ftp, s3 present
-  ls linux/target/profiles/*.cyberduckprofile | wc -l                   # more than 50
+  ls linux/target/profiles/*.cyberduckprofile | wc -l                   # 24, same as: find profiles -name '*.cyberduckprofile' -not -path '*/target/*' | wc -l
   ```
 
   **Commit**: `Bootstrap preferences, protocols and bookmarks for Linux.`
+
+  **Done (executor notes)**
+  - The repository bundles 24 profiles. The other connection profiles live in the separate `iterate-ch/profiles`
+    repository, so the original "more than 50" threshold was wrong. Output is 24 protocol lines.
+  - Startup logic lives in `Bootstrap` (`initialize()` for preferences, protocols and profiles; `loadBookmarks()`), used by
+    `MainApplication` for every mode. Bookmarks load in `CyberduckApplication.init()`, off the JavaFX thread.
+    `BookmarkCollection.load()` throws a checked exception, which is caught and logged so a bad folder never blocks startup.
+  - Declaring `maven-dependency-plugin` also turns on the parent's `copy-dependencies-*` executions, which copy all jars and
+    `libjnidispatch.so` into `linux/target`. The jar copy strips the classifier, so JavaFX's plain and `linux` jars share
+    one file name. In this build the file holds the native libraries (`unzip -l linux/target/javafx-graphics-25.0.4.jar | grep -c '\.so'`
+    prints 10), but this depends on copy order, so step 4.1 must verify it in the app image.
 
 - [ ] **1.5 `FxController` and the JavaFX test harness**
 
@@ -609,6 +620,7 @@ later publishes packages.
   linux/target/release/Cyberduck/bin/Cyberduck --version
   ls linux/target/release/Cyberduck/lib/app/profiles | head -3
   ls -d linux/target/release/Cyberduck/lib/app/*.lproj | wc -l       # more than 20
+  unzip -l linux/target/release/Cyberduck/lib/app/javafx-graphics-*.jar | grep -c 'libglass.so'   # 1: the JavaFX natives are present
   xvfb-run -a linux/target/release/Cyberduck/bin/Cyberduck --smoke list /tmp; echo "exit=$?"
   ```
 
