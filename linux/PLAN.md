@@ -926,7 +926,7 @@ later publishes packages.
     `xvfb-run -a cyberduck --smoke list` printed `SMOKE OK list 2`, and `apt-get remove` cleaned up. In this sandbox that test
     needs about 15 minutes for the downloads. Docker Hub is rate limited, so the image came from `mirror.gcr.io/library/ubuntu:24.04`.
 
-- [ ] **4.4 `.rpm` package**
+- [x] **4.4 `.rpm` package**
 
   **Do**
   - Add the `rpm` antcall. Create `setup/rpm/cyberduck.spec` from `duck.spec` (name `cyberduck`,
@@ -949,6 +949,16 @@ later publishes packages.
   Expect the version line and `SMOKE OK list`.
 
   **Commit**: `Build RPM package for Linux GUI.`
+
+  **Done (executor notes)**
+  - jpackage looks for the spec file under the name `cyberduck.spec` (its verbose output says so). `setup/linux/cyberduck.spec` is the
+    default template with the same two changes as the deb scripts: own menu entry and `/usr/bin/cyberduck` in `%post`, removal in
+    `%preun` only when `$1` is 0 (not on upgrade). The default spec sets `Autoreq: 0`, so the dependencies are listed by hand with
+    `--linux-package-deps "gtk3, mesa-libGL, libXtst, alsa-lib"` (plus `xdg-utils` from jpackage). License type is `GPL`.
+  - `rpm -qpi` shows `Name: cyberduck`, `Version: 9.6.0.0`, `License: GPL`, and `rpm -qpl` lists `/opt/cyberduck/bin/Cyberduck`.
+  - In a clean `fedora` container `rpm -i --nodeps` creates the command and the menu entry, an upgrade keeps them, and `rpm -e` removes
+    them and `/opt/cyberduck`. A complete `dnf install` with the dependencies could not be run here because the sandbox blocks the Fedora
+    mirrors (`Status code: 40x`). The `install-rpm` job of the workflow does that (step 4.5).
 
 - [ ] **4.5 Package artifacts and install tests in the workflow**
 

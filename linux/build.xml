@@ -50,8 +50,12 @@
         <!-- The command cyberduck on the path, in addition to what jpackage does for the menu entry. -->
         <copy file="${setup}/linux/cyberduck.postinst" tofile="${build.resources}/postinst"/>
         <copy file="${setup}/linux/cyberduck.prerm" tofile="${build.resources}/prerm"/>
+        <copy file="${setup}/linux/cyberduck.spec" tofile="${build.resources}/cyberduck.spec"/>
         <antcall target="jpackage">
             <param name="type" value="deb"/>
+        </antcall>
+        <antcall target="jpackage">
+            <param name="type" value="rpm"/>
         </antcall>
         <antcall target="jpackage">
             <param name="type" value="app-image"/>
@@ -64,6 +68,9 @@
         </condition>
         <condition property="is-deb">
             <equals arg1="${type}" arg2="deb"/>
+        </condition>
+        <condition property="is-rpm">
+            <equals arg1="${type}" arg2="rpm"/>
         </condition>
         <echo message="Create native ${type} bundle"/>
         <exec executable="${java.home}/bin/jpackage" failonerror="true">
@@ -116,6 +123,10 @@
             <!-- JavaFX brings its own native libraries inside its jars, so jpackage cannot find what they need -->
             <arg value="--linux-package-deps" if:true="${is-deb}"/>
             <arg value="libgtk-3-0t64 | libgtk-3-0, libgl1" if:true="${is-deb}"/>
+            <arg value="--linux-package-deps" if:true="${is-rpm}"/>
+            <arg value="gtk3, mesa-libGL, libXtst, alsa-lib" if:true="${is-rpm}"/>
+            <arg value="--linux-rpm-license-type" if:true="${is-rpm}"/>
+            <arg value="GPL" if:true="${is-rpm}"/>
             <arg value="--linux-deb-maintainer" unless:true="${is-app-image}"/>
             <arg value="&lt;feedback@cyberduck.io&gt;" unless:true="${is-app-image}"/>
             <arg value="--type"/>
