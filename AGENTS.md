@@ -96,7 +96,8 @@ register it in that protocol's `*Protocol`/`*Session`; don't add methods to `Ses
 - `i18n` — localized `*.strings` files compiled into `*.lproj` bundles. Source strings are managed via Transifex; don't
   hand-edit non-English translations.
 - `importer` — bookmark/settings import from other apps.
-- Platform front-ends: `osx` (Cocoa app), `windows` (.NET/WPF app via IKVM + MSBuild), `cli` + `cli/{linux,osx,
+- Platform front-ends: `osx` (Cocoa app), `windows` (.NET/WPF app via IKVM + MSBuild), `linux` (JavaFX app, package
+  `ch.cyberduck.ui.fx`, deb and rpm via jpackage, see `linux/PLAN.md`), `cli` + `cli/{linux,osx,
   windows}` (the `duck` command, built on `args4j`).
 - `test` — aggregator that runs the integration suite across protocol modules; also publishes `core`'s `test-jar`
   used as a test dependency elsewhere.
