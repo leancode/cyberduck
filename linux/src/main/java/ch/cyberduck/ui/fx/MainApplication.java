@@ -46,9 +46,9 @@ public final class MainApplication {
             return;
         }
         final int smoke = arguments.indexOf("--smoke");
-        if(smoke >= 0) {
+        if(smoke >= 0 && Smoke.isHeadless(arguments.subList(smoke + 1, arguments.size()))) {
             // Exit explicitly because the core keeps non-daemon threads alive
-            System.exit(Smoke.run(arguments.subList(smoke + 1, arguments.size())));
+            System.exit(Smoke.run(arguments.subList(smoke + 1, arguments.size()), null));
         }
         Application.launch(CyberduckApplication.class, args);
     }

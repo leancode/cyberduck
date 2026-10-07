@@ -24,6 +24,7 @@ smoke() {
 }
 
 mkdir "$work/list" && touch "$work/list/a" "$work/list/b" "$work/list/c"
+smoke '^SMOKE OK core-list 3$' core-list "$work/list"
 smoke '^SMOKE OK list 3$' list "$work/list"
 
 echo "SMOKE SCRIPT OK"

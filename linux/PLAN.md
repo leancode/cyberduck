@@ -312,7 +312,7 @@ directory listing, navigate, download and upload files with overwrite prompts, c
 folders, rename, see transfer progress, save and reopen a bookmark, and get an error dialog instead
 of a hang on failure.
 
-- [ ] **2.1 Browser window with a file table**
+- [x] **2.1 Browser window with a file table**
 
   **Do**
   - `BrowserController extends FxController` owns a `Stage`. Layout: toolbar (Connect, Refresh, Up,
@@ -336,6 +336,18 @@ of a hang on failure.
   exception in the output.
 
   **Commit**: `Add browser window with directory listing.`
+
+  **Done (executor notes)**
+  - Toolbar buttons are added by the step that makes them work (navigation 2.2, connect 2.3, transfers 2.7 and 2.8, file
+    operations 2.10), so no button is ever visible without a function. 2.1 has the path field, the table and the status bar.
+  - Uses `MountWorker` (home folder plus first listing) and `ListWorker`, the same workers as the macOS browser.
+    `Smoke list` mounts the local filesystem at the given folder through the real `BrowserController`. The old headless
+    scenario is now `core-list`. Both are in `smoke.sh`.
+  - Hidden files are filtered with `DefaultBrowserFilter` unless the `browser.showHidden` preference is on. Folders sort first.
+  - The status bar shows the activity message while busy and `N items` when idle, because the core clears the message when a
+    background action ends.
+  - Visual proof: run `SMOKE_HOLD=8 linux/run.sh --smoke list <dir>` under `xvfb-run -s "-screen 0 1000x700x24"` and take
+    `import -window root shot.png` (ImageMagick). `SMOKE_HOLD` keeps the window open for that many seconds after the scenario.
 
 - [ ] **2.2 Navigation**
 
