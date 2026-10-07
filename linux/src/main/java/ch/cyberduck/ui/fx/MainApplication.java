@@ -15,7 +15,6 @@ package ch.cyberduck.ui.fx;
  * GNU General Public License for more details.
  */
 
-import ch.cyberduck.core.preferences.MemoryPreferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 
 import java.util.Arrays;
@@ -35,7 +34,7 @@ public final class MainApplication {
     public static void main(final String... args) {
         final List<String> arguments = Arrays.asList(args);
         if(arguments.contains("--version")) {
-            PreferencesFactory.set(new MemoryPreferences());
+            PreferencesFactory.set(new LinuxApplicationPreferences());
             System.out.printf("Cyberduck %s%n", Version.get());
             return;
         }
