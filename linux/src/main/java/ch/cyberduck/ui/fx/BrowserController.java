@@ -123,6 +123,7 @@ public class BrowserController extends FxController {
     private final Button refresh = new Button("Refresh");
     private final Button download = new Button("Download");
     private final Button upload = new Button("Upload");
+    private final Button transfers = new Button("Transfers");
     private final StringProperty summary = new SimpleStringProperty(StringUtils.EMPTY);
 
     private final Cache<Path> cache = new PathCache(preferences.getInteger("browser.cache.size"));
@@ -173,12 +174,13 @@ public class BrowserController extends FxController {
         refresh.setOnAction(event -> this.reload());
         download.setOnAction(event -> this.download());
         upload.setOnAction(event -> this.upload());
+        transfers.setOnAction(event -> TransferController.get().show());
         upload.disableProperty().bind(Bindings.createBooleanBinding(() -> null == rendered, renderedProperty));
         download.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, download, upload, location);
+        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, download, upload, transfers, location);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
 

@@ -25,6 +25,7 @@ import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.ProtocolFactory;
 import ch.cyberduck.core.SessionPoolFactory;
 import ch.cyberduck.core.preferences.PreferencesFactory;
+import ch.cyberduck.core.transfer.Transfer;
 import ch.cyberduck.core.transfer.TransferAction;
 import ch.cyberduck.core.nio.LocalProtocol;
 import ch.cyberduck.core.pool.SessionPool;
@@ -213,16 +214,32 @@ public final class Smoke {
         final java.nio.file.Path original = java.nio.file.Paths.get(source, "f.bin");
         final java.nio.file.Path copy = java.nio.file.Paths.get(target, "f.bin");
         final TransferController transfers = TransferController.get();
+        onFx(() -> {
+            transfers.show();
+            return null;
+        });
 
+        // Slow enough to see the progress. A megabyte takes about four seconds.
+        PreferencesFactory.get().setProperty("queue.download.bandwidth.bytes", "262144");
         select(browser, "f.bin");
         onFx(() -> {
             browser.getDownloadButton().fire();
             return null;
         });
+        await("transfer listed", () -> onFx(() -> 1 == transfers.getTable().getItems().size()));
+        await("progress shown", () -> onFx(() -> {
+            final double fraction = transfers.fraction(transfers.getTable().getItems().get(0));
+            return fraction > 0d && fraction < 1d;
+        }));
+        System.out.printf("While running: %s%n", onFx(() -> transfers.status(transfers.getTable().getItems().get(0))));
         await("first download", () -> transfers.getCompleted() >= 1);
         check("downloaded content is the same", -1 == java.nio.file.Files.mismatch(original, copy));
+        await("status complete", () -> onFx(() -> "Complete".equals(transfers.status(transfers.getTable().getItems().get(0)))));
+        final int events = transfers.getProgressEvents();
+        check("progress was reported", events >= 1);
 
         // The local file now differs, so the second download has to ask
+        PreferencesFactory.get().setProperty("queue.download.bandwidth.bytes", "-1");
         java.nio.file.Files.write(copy, "old local content".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         select(browser, "f.bin");
         onFx(() -> {
@@ -233,7 +250,44 @@ public final class Smoke {
             "old local content".equals(new String(java.nio.file.Files.readAllBytes(copy), java.nio.charset.StandardCharsets.UTF_8))));
         await("second download", () -> transfers.getCompleted() >= 2);
         check("overwritten with the remote content", -1 == java.nio.file.Files.mismatch(original, copy));
-        return transfers.getProgressEvents();
+
+        // Stop a slow transfer, then resume it
+        PreferencesFactory.get().setProperty("queue.download.bandwidth.bytes", "65536");
+        java.nio.file.Files.delete(copy);
+        select(browser, "f.bin");
+        onFx(() -> {
+            browser.getDownloadButton().fire();
+            return null;
+        });
+        await("third transfer listed", () -> onFx(() -> 3 == transfers.getTable().getItems().size()));
+        final Transfer slow = onFx(() -> transfers.getTable().getItems().get(2));
+        await("third transfer running", () -> onFx(() -> slow.isRunning() && transfers.fraction(slow) > 0.05d));
+        onFx(() -> {
+            transfers.getTable().getSelectionModel().clearSelection();
+            transfers.getTable().getSelectionModel().select(slow);
+            transfers.stop();
+            return null;
+        });
+        await("stopped", () -> onFx(() -> !slow.isRunning()));
+        await("status incomplete", () -> onFx(() -> "Incomplete".equals(transfers.status(slow))));
+        check("only part was downloaded", java.nio.file.Files.size(copy) < java.nio.file.Files.size(original));
+        final int completed = transfers.getCompleted();
+        onFx(() -> {
+            slow.setBandwidth(-1f);
+            transfers.resume();
+            return null;
+        });
+        await("resumed transfer", () -> transfers.getCompleted() >= completed + 1);
+        check("resumed content is complete", -1 == java.nio.file.Files.mismatch(original, copy));
+
+        // Remove from the list
+        onFx(() -> {
+            transfers.getTable().getSelectionModel().selectAll();
+            transfers.remove();
+            return null;
+        });
+        await("list emptied", () -> onFx(() -> transfers.getTable().getItems().isEmpty()));
+        return events;
     }
 
     interface Check {
