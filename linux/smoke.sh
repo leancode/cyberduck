@@ -7,6 +7,9 @@ cd "$(cd "$(dirname "$0")/.." && pwd)"
 bin="${CYBERDUCK_BIN:-linux/run.sh}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+# Preferences, bookmarks and logs are written to the home folder. Never touch the real one.
+export HOME="$work/home"
+mkdir -p "$HOME"
 
 fail() {
     echo "SMOKE SCRIPT FAIL: $*" >&2
@@ -33,5 +36,7 @@ smoke '^SMOKE OK navigate$' navigate "$work/nav"
 smoke '^SMOKE OK connect 3$' connect "$work/list"
 
 smoke '^SMOKE OK connect-fail ' connect-fail
+
+smoke '^SMOKE OK bookmarks$' bookmarks "$work/list"
 
 echo "SMOKE SCRIPT OK"

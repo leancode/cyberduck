@@ -68,6 +68,7 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
@@ -98,6 +99,7 @@ public class BrowserController extends FxController {
     private final TableView<Path> table = new TableView<>();
     private final ObservableList<Path> rows = FXCollections.observableArrayList();
     private final Label status = new Label();
+    private final ToggleButton bookmarksToggle = new ToggleButton("Bookmarks");
     private final Button connect = new Button("Connect");
     private final Button back = new Button("Back");
     private final Button up = new Button("Up");
@@ -128,6 +130,7 @@ public class BrowserController extends FxController {
      */
     private Path pending;
     private ConnectionDialog connection;
+    private BookmarkController bookmarks;
     /**
      * Previously shown directories for the back button
      */
@@ -140,13 +143,17 @@ public class BrowserController extends FxController {
     }
 
     private BorderPane build() {
+        final BorderPane root = new BorderPane();
+        bookmarks = new BookmarkController(this);
+        bookmarksToggle.setSelected(true);
+        bookmarksToggle.setOnAction(event -> root.setLeft(bookmarksToggle.isSelected() ? bookmarks.getPane() : null));
         connect.setOnAction(event -> this.connect());
         back.setOnAction(event -> this.back());
         up.setOnAction(event -> this.up());
         refresh.setOnAction(event -> this.reload());
         location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, connect, back, up, refresh, location);
+        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, location);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
 
@@ -202,7 +209,8 @@ public class BrowserController extends FxController {
         final HBox bottom = new HBox(status);
         bottom.setPadding(new Insets(4, 8, 4, 8));
 
-        final BorderPane root = new BorderPane(table);
+        root.setCenter(table);
+        root.setLeft(bookmarks.getPane());
         root.setTop(top);
         root.setBottom(bottom);
         this.updateNavigation();
@@ -424,6 +432,10 @@ public class BrowserController extends FxController {
     /**
      * @return The connection dialog that was opened last
      */
+    BookmarkController getBookmarks() {
+        return bookmarks;
+    }
+
     ConnectionDialog getConnectionDialog() {
         return connection;
     }

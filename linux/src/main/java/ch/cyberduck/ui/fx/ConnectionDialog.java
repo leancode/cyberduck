@@ -48,7 +48,9 @@ public class ConnectionDialog extends Dialog<Host> {
     private static final Logger log = LogManager.getLogger(ConnectionDialog.class);
 
     private final ProtocolFactory protocols;
+    private final boolean bookmark;
 
+    private final TextField nickname = new TextField();
     private final ComboBox<Protocol> protocol = new ComboBox<>();
     private final TextField server = new TextField();
     private final TextField port = new TextField();
@@ -56,14 +58,27 @@ public class ConnectionDialog extends Dialog<Host> {
     private final PasswordField password = new PasswordField();
     private final TextField path = new TextField();
     private final Label error = new Label();
-    private final ButtonType connect = new ButtonType("Connect", ButtonBar.ButtonData.OK_DONE);
+    private final ButtonType connect;
 
     private Host host;
 
+    /**
+     * Ask for a server to connect to
+     */
     public ConnectionDialog(final Window owner, final ProtocolFactory protocols) {
+        this(owner, protocols, false, null);
+    }
+
+    /**
+     * @param bookmark True to create or edit a bookmark, which has a name and is saved, instead of connecting
+     * @param initial  Values to start with or null
+     */
+    public ConnectionDialog(final Window owner, final ProtocolFactory protocols, final boolean bookmark, final Host initial) {
         this.protocols = protocols;
+        this.bookmark = bookmark;
+        this.connect = new ButtonType(bookmark ? "Save" : "Connect", ButtonBar.ButtonData.OK_DONE);
         this.initOwner(owner);
-        this.setTitle("Open Connection");
+        this.setTitle(bookmark ? (null == initial ? "New Bookmark" : "Edit Bookmark") : "Open Connection");
         this.getDialogPane().getButtonTypes().addAll(connect, ButtonType.CANCEL);
         this.getDialogPane().setContent(this.build());
 
@@ -74,6 +89,9 @@ public class ConnectionDialog extends Dialog<Host> {
             try {
                 host = HostBuilder.fromFields(protocols, protocol.getValue(), server.getText(), port.getText(),
                     username.getText(), password.getText(), path.getText());
+                if(bookmark) {
+                    host.setNickname(StringUtils.trimToNull(nickname.getText()));
+                }
                 error.setText(StringUtils.EMPTY);
             }
             catch(HostParserException | IllegalArgumentException e) {
@@ -89,6 +107,25 @@ public class ConnectionDialog extends Dialog<Host> {
         protocol.valueProperty().addListener((observable, previous, selected) -> this.configure(selected));
         final Protocol preferred = protocols.forName("sftp");
         protocol.setValue(null != preferred ? preferred : protocol.getItems().stream().findFirst().orElse(null));
+        if(initial != null) {
+            this.prefill(initial);
+        }
+    }
+
+    /**
+     * Start with the values of a bookmark. The protocol is selected first because that resets the other fields.
+     */
+    private void prefill(final Host initial) {
+        protocol.setValue(initial.getProtocol());
+        if(initial.getProtocol().isHostnameConfigurable()) {
+            server.setText(initial.getHostname());
+        }
+        if(initial.getProtocol().isPortConfigurable()) {
+            port.setText(String.valueOf(initial.getPort()));
+        }
+        username.setText(StringUtils.defaultString(initial.getCredentials().getUsername()));
+        path.setText(StringUtils.defaultString(initial.getDefaultPath()));
+        nickname.setText(StringUtils.defaultString(initial.getNickname()));
     }
 
     private GridPane build() {
@@ -102,15 +139,23 @@ public class ConnectionDialog extends Dialog<Host> {
         grid.getColumnConstraints().addAll(labels, fields);
         protocol.setMaxWidth(Double.MAX_VALUE);
         server.setPromptText("Server or URL");
-        grid.addRow(0, new Label("Protocol"), protocol);
-        grid.addRow(1, new Label("Server"), server);
-        grid.addRow(2, new Label("Port"), port);
-        grid.addRow(3, new Label("Username"), username);
-        grid.addRow(4, new Label("Password"), password);
-        grid.addRow(5, new Label("Path"), path);
+        int row = 0;
+        if(bookmark) {
+            nickname.setPromptText("Name of the bookmark");
+            grid.addRow(row++, new Label("Name"), nickname);
+        }
+        grid.addRow(row++, new Label("Protocol"), protocol);
+        grid.addRow(row++, new Label("Server"), server);
+        grid.addRow(row++, new Label("Port"), port);
+        grid.addRow(row++, new Label("Username"), username);
+        if(!bookmark) {
+            // A bookmark stores no password
+            grid.addRow(row++, new Label("Password"), password);
+        }
+        grid.addRow(row++, new Label("Path"), path);
         error.setStyle("-fx-text-fill: red;");
         error.setWrapText(true);
-        grid.add(error, 0, 6, 2, 1);
+        grid.add(error, 0, row, 2, 1);
         return grid;
     }
 
@@ -130,6 +175,10 @@ public class ConnectionDialog extends Dialog<Host> {
         password.setDisable(!selected.isPasswordConfigurable());
         path.setPromptText(StringUtils.defaultString(selected.getDefaultPath()));
         error.setText(StringUtils.EMPTY);
+    }
+
+    TextField getNicknameField() {
+        return nickname;
     }
 
     ComboBox<Protocol> getProtocolBox() {
