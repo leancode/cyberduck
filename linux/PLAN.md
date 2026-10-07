@@ -1152,6 +1152,17 @@ later publishes packages.
   row and see the transfer.
 - [ ] **5.9 Flatpak manifest** under `setup/flatpak/` built from the app image. Proof:
   `flatpak-builder` succeeds locally and `flatpak run io.cyberduck --version` prints the version.
+  **Executor note (not ticked)**: written, not built. `setup/flatpak/` has the manifest `io.cyberduck.Cyberduck.yml`
+  (GNOME 48 runtime, wraps the application image from `linux/target/release/Cyberduck`, sockets for X11, SSH agent,
+  network, home folder, D-Bus names for the keyring and notifications), a desktop entry, AppStream metadata and a README
+  with the build commands. What was checked offline: `flatpak-builder --show-manifest` parses the manifest,
+  `desktop-file-validate` is clean, `appstreamcli validate --no-net` passes with one pedantic hint about missing
+  screenshots. What was not possible: the sandbox of this session cannot reach Flathub, so the runtime could not be
+  installed and no build ran. The workflow `linux-flatpak.yml` (manual start) builds the image, installs the runtime,
+  builds the Flatpak, runs `--version` and the list smoke inside it and uploads the bundle. Start it once to close this
+  step. Open points listed in the README: `secret-tool` and `notify-send` are not in the runtime, so inside the sandbox
+  passwords go to the credentials file and there are no notifications until libsecret and libnotify are added or the
+  portals are used.
 - [ ] **5.10 Add `linux-gui.yml` smoke suite to branch protection** as a required check (operator action).
 
 ---
