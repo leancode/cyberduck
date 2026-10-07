@@ -1035,11 +1035,23 @@ later publishes packages.
 
 ## Phase 5: Beyond the minimum (ordered, each still one step with a proof)
 
-- [ ] **5.1 Secret Service password store**: `SecretToolPasswordStore` implementing
+- [x] **5.1 Secret Service password store**: `SecretToolPasswordStore` implementing
   `HostPasswordStore` by running `secret-tool store/lookup/clear` (libsecret) with attributes
   `service=cyberduck host port user protocol`; falls back to `UnsecureHostPasswordStore` when
   `secret-tool` is missing. Register under `factory.passwordstore.class`. Proof: unit test that is
   skipped when `secret-tool` is absent, otherwise stores, finds and deletes a password.
+
+  **Executor note**: done. `SecretToolPasswordStore` extends `DefaultHostPasswordStore`, so bookmarks, keys and
+  tokens work as on the other platforms. The password goes to `secret-tool store` on standard input, never on the command
+  line (a test checks the logged arguments). Items carry `application=cyberduck` plus `kind`, `scheme`, `port`, `host`,
+  `user` for internet passwords and `service`, `account` for generic ones. Without the tool it falls back to the
+  credentials file. A locked keyring makes `secret-tool` wait for a prompt, so every run has a timeout (60 s, 10 s in
+  the test) and fails with an access denied error. Proof: 6 tests. Five use a fake `secret-tool` script (store, find,
+  delete, other account and port not found, bookmark login, fallback, timeout). The sixth uses the real tool and skips
+  without an unlocked Secret Service. Run locally with a real gnome-keyring: all 6 pass, 0 skipped, using
+  `dbus-run-session -- sh -c 'eval "$(printf test | gnome-keyring-daemon --unlock --components=secrets)"; mvn ...'`
+  (an empty keyring password makes the daemon ask a prompter for a display, so use a non-empty one).
+
 - [ ] **5.2 Desktop notifications**: `NotifySendNotificationService` using `notify-send`, registered
   under `factory.notification.class`; transfer completion notifies. Proof: test skipped without
   `notify-send`; smoke download prints `notified` when available.
