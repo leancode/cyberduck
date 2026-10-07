@@ -16,6 +16,7 @@ package ch.cyberduck.ui.fx;
  */
 
 import ch.cyberduck.core.Local;
+import ch.cyberduck.core.cryptomator.DefaultVaultProvider;
 import ch.cyberduck.core.editor.DefaultEditorFactory;
 import ch.cyberduck.core.i18n.RegexLocale;
 import ch.cyberduck.core.local.DefaultSymlinkFeature;
@@ -181,6 +182,7 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
         }
         // Most servers of the users are reached with SSH
         this.setDefault("connection.protocol.default", "sftp");
+        this.setDefault("factory.vaultprovider.class", DefaultVaultProvider.class.getName());
         this.setDefault("factory.notification.class", NotifySendNotificationService.class.getName());
         // The keyring of the desktop. Falls back to the credentials file when secret-tool is not installed.
         this.setDefault("factory.passwordstore.class", SecretToolPasswordStore.class.getName());

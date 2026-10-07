@@ -55,6 +55,17 @@ grep -qx 'connection.timeout.seconds=45' "$HOME/.duck/cyberduck.properties" || f
 grep -qx 'connection.retry=2' "$HOME/.duck/cyberduck.properties" || fail "preferences: the retries were not saved to cyberduck.properties"
 smoke '^SMOKE OK preferences-check timeout=45$' preferences-check
 
+# A Cryptomator vault: create it, unlock it, upload into it. The name and the text must not be readable on disk.
+# It has a home of its own, because the finished upload stays in the list of transfers of the next start.
+mkdir -p "$work/vault" "$work/home-vault/.duck"
+cp "$HOME/.duck/cyberduck.properties" "$work/home-vault/.duck/cyberduck.properties"
+echo "the amount due is 1234 francs" > "$work/invoice-2026.txt"
+HOME="$work/home-vault" smoke '^SMOKE OK vault listed=invoice-2026.txt ondisk=encrypted$' vault "$work/vault" "$work/invoice-2026.txt"
+[ -f "$work/vault/secret/masterkey.cryptomator" ] || fail "vault: no master key was written"
+! grep -rl "invoice" "$work/vault" >/dev/null 2>&1 || fail "vault: the file name is on disk in clear text"
+! grep -rl "1234 francs" "$work/vault" >/dev/null 2>&1 || fail "vault: the file content is on disk in clear text"
+! find "$work/vault" -iname '*invoice*' | grep -q . || fail "vault: a file name on disk shows the clear text name"
+
 mkdir -p "$work/nav/a/b" && echo hello > "$work/nav/a/b/file.txt"
 smoke '^SMOKE OK navigate$' navigate "$work/nav"
 

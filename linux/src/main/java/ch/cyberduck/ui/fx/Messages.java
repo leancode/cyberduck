@@ -26,7 +26,7 @@ public final class Messages {
 
     private static final String[] TABLES = {
         "Localizable", "Browser", "Folder", "Transfer", "Credentials", "Connection", "Bookmark", "Download", "Alert",
-        "Prompt", "Main", "File", "Edit", "Login", "Status", "Preferences", "Error"
+        "Prompt", "Cryptomator", "Main", "File", "Edit", "Login", "Status", "Preferences", "Error"
     };
 
     private Messages() {

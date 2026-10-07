@@ -33,6 +33,14 @@ import ch.cyberduck.core.SessionPoolFactory;
 import ch.cyberduck.core.UserDateFormatterFactory;
 import ch.cyberduck.core.formatter.SizeFormatterFactory;
 import ch.cyberduck.core.pool.SessionPool;
+import ch.cyberduck.core.worker.LockVaultWorker;
+import ch.cyberduck.core.worker.LoadVaultWorker;
+import ch.cyberduck.core.worker.CreateVaultWorker;
+import ch.cyberduck.core.vault.VaultVersion;
+import ch.cyberduck.core.vault.VaultCredentials;
+import ch.cyberduck.core.vault.RegistryVaultLoader;
+import ch.cyberduck.core.features.Vault;
+import ch.cyberduck.core.PasswordCallbackFactory;
 import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.threading.DisconnectBackgroundAction;
@@ -147,6 +155,7 @@ public class BrowserController extends FxController {
     private final StringProperty summary = new SimpleStringProperty(StringUtils.EMPTY);
 
     private final Cache<Path> cache = new PathCache(preferences.getInteger("browser.cache.size"));
+    private volatile VaultDialog vaultDialog;
     private final List<InfoController> infos = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final ListProgressListener listener = new ListProgressListener() {
         @Override
@@ -317,6 +326,17 @@ public class BrowserController extends FxController {
         final MenuItem closeWindow = new MenuItem(Messages.get("Close Window"));
         closeWindow.setAccelerator(KeyCombination.keyCombination("Shortcut+W"));
         closeWindow.setOnAction(event -> this.close());
+        final MenuItem createVault = new MenuItem(Messages.get("Create Vault") + "…");
+        createVault.setOnAction(event -> this.createVault());
+        createVault.disableProperty().bind(Bindings.createBooleanBinding(() -> null == rendered, renderedProperty));
+        final MenuItem lockVault = new MenuItem(Messages.get("Unlock Vault"));
+        lockVault.setOnAction(event -> this.lockUnlockVault());
+        lockVault.disableProperty().bind(Bindings.createBooleanBinding(
+            () -> null == table.getSelectionModel().getSelectedItem() || !table.getSelectionModel().getSelectedItem().isDirectory(),
+            table.getSelectionModel().selectedItemProperty()));
+        // The text follows the state of the selected folder
+        table.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) ->
+            lockVault.setText(Messages.get(null != selected && this.isMounted() && pool.getVaultRegistry().contains(selected) ? "Lock Vault" : "Unlock Vault")));
         final MenuItem info = new MenuItem(Messages.get("Get Info"));
         info.setAccelerator(KeyCombination.keyCombination("Shortcut+I"));
         info.setOnAction(event -> this.info());
@@ -331,9 +351,85 @@ public class BrowserController extends FxController {
         showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
         showTransfers.setOnAction(event -> TransferController.get().show());
         menu = new MenuBar(
-            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
             new Menu(Messages.get("Window"), null, showTransfers));
         return menu;
+    }
+
+    /**
+     * Ask for a name and a passphrase, then make a Cryptomator vault in the folder that is shown
+     */
+    void createVault() {
+        if(!this.isMounted() || null == workdir) {
+            return;
+        }
+        final VaultDialog dialog = new VaultDialog(stage);
+        vaultDialog = dialog;
+        final java.util.Optional<VaultDialog.Result> result;
+        try {
+            result = dialog.showAndWait();
+        }
+        finally {
+            vaultDialog = null;
+        }
+        if(!result.isPresent()) {
+            return;
+        }
+        final Path folder = new Path(workdir, result.get().getName(), EnumSet.of(Path.Type.directory));
+        final VaultCredentials passphrase = new VaultCredentials(result.get().getPassphrase()).setSaved(result.get().isSave());
+        final VaultVersion metadata = new VaultVersion(VaultVersion.Type.valueOf(preferences.getProperty("cryptomator.vault.default")));
+        this.background(new WorkerBackgroundAction<>(this, pool, new CreateVaultWorker(Location.unknown.getIdentifier(), folder, passphrase, metadata) {
+            @Override
+            public void cleanup(final Vault vault) {
+                super.cleanup(vault);
+                if(vault != null) {
+                    selectAfterRender = folder;
+                }
+                reload();
+            }
+        }));
+    }
+
+    /**
+     * Lock the selected folder when it is an open vault, otherwise ask for the passphrase and unlock it
+     */
+    void lockUnlockVault() {
+        final Path selected = table.getSelectionModel().getSelectedItem();
+        if(null == selected || !selected.isDirectory() || !this.isMounted()) {
+            return;
+        }
+        if(pool.getVaultRegistry().contains(selected)) {
+            this.background(new WorkerBackgroundAction<>(this, pool, new LockVaultWorker(pool.getVaultRegistry(), selected) {
+                @Override
+                public void cleanup(final Path locked) {
+                    super.cleanup(locked);
+                    cache.invalidate(selected);
+                    reload();
+                }
+            }));
+        }
+        else {
+            this.background(new WorkerBackgroundAction<>(this, pool, new LoadVaultWorker(new RegistryVaultLoader(pool.getVaultRegistry(),
+                PasswordCallbackFactory.get(this)), selected) {
+                @Override
+                public void cleanup(final Vault vault) {
+                    super.cleanup(vault);
+                    cache.invalidate(selected);
+                    reload();
+                }
+            }));
+        }
+    }
+
+    /**
+     * @return True when the folder is a vault that is unlocked
+     */
+    boolean isUnlocked(final Path directory) {
+        return this.isMounted() && pool.getVaultRegistry().contains(directory);
+    }
+
+    VaultDialog getVaultDialog() {
+        return vaultDialog;
     }
 
     /**

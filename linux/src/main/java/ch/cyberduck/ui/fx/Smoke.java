@@ -105,6 +105,9 @@ public final class Smoke {
                     System.out.printf("SMOKE OK locale refresh=%s%n", onFx(() -> browser.getRefresh().getText()));
                     hold();
                     return 0;
+                case "vault":
+                    System.out.println(vault(browser, arguments.get(1), arguments.get(2)));
+                    return 0;
                 case "info":
                     System.out.println(info(browser, arguments.get(1), arguments.get(2)));
                     return 0;
@@ -1040,5 +1043,98 @@ public final class Smoke {
             return null;
         });
         return line;
+    }
+
+    /**
+     * An encrypted vault with the dialogs a user would use: create it, unlock it, upload a file into it, see the real
+     * name in the listing and look at what is on disk. Then lock it.
+     *
+     * @param directory Empty folder for the vault
+     * @param source    File to upload, with a name that must not appear on disk
+     * @return The line to print
+     */
+    private static String vault(final BrowserController browser, final String directory, final String source) throws Exception {
+        final String passphrase = "correct horse battery staple";
+        final java.io.File local = new java.io.File(source);
+        mount(browser, directory);
+
+        // The dialog does not accept two different passphrases
+        onFx(() -> {
+            Platform.runLater(browser::createVault);
+            return null;
+        });
+        await("vault dialog", () -> onFx(() -> null != browser.getVaultDialog() && browser.getVaultDialog().isShowing()));
+        final boolean refused = onFx(() -> {
+            final VaultDialog dialog = browser.getVaultDialog();
+            dialog.getName().setText("secret");
+            dialog.getPassphrase().setText(passphrase);
+            dialog.getConfirm().setText("something else");
+            return dialog.getDialogPane().lookupButton(dialog.getDialogPane().getButtonTypes().get(0)).isDisabled();
+        });
+        check("different passphrases are refused", refused);
+        onFx(() -> {
+            final VaultDialog dialog = browser.getVaultDialog();
+            dialog.getConfirm().setText(passphrase);
+            dialog.getSave().setSelected(false);
+            final javafx.scene.Node create = dialog.getDialogPane().lookupButton(dialog.getDialogPane().getButtonTypes().get(0));
+            check("equal passphrases are accepted", !create.isDisabled());
+            ((javafx.scene.control.Button) create).fire();
+            return null;
+        });
+        await("vault folder shown", () -> names(browser).contains("secret"));
+        final java.nio.file.Path raw = java.nio.file.Paths.get(directory, "secret");
+        check("vault folder has files", java.nio.file.Files.isDirectory(raw) && java.nio.file.Files.list(raw).findAny().isPresent());
+
+        // Unlock with the passphrase typed into the prompt
+        select(browser, "secret");
+        check("locked vault offers to unlock", "Unlock Vault".equals(onFx(() -> browser.getMenuBar().getMenus().get(0).getItems().stream()
+            .filter(i -> i.getText() != null && i.getText().contains("Vault") && !i.getText().contains("Create")).findFirst().orElseThrow().getText())));
+        onFx(() -> {
+            Platform.runLater(browser::lockUnlockVault);
+            return null;
+        });
+        final java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
+        awaitAnswering("vault unlocked", passphrase, counts, () -> onFx(() -> browser.isUnlocked(browser.getTable().getSelectionModel().getSelectedItem())));
+        check("asked for the passphrase", counts.containsKey("password"));
+
+        // Inside the vault the upload is encrypted
+        doubleClick(browser, "secret");
+        awaitRendered(browser, directory + "/secret");
+        final int before = TransferController.get().getCompleted();
+        onFx(() -> {
+            browser.upload(List.of(local));
+            return null;
+        });
+        // The transfer opens its own connection, which asks for the passphrase again unless it was saved
+        awaitAnswering("upload into vault", passphrase, counts, () -> TransferController.get().getCompleted() >= before + 1);
+        await("name shown", () -> names(browser).contains(local.getName()));
+        final String names;
+        try(java.util.stream.Stream<java.nio.file.Path> walk = java.nio.file.Files.walk(raw)) {
+            names = walk.map(p -> raw.relativize(p).toString()).collect(java.util.stream.Collectors.joining(","));
+        }
+        check("the name is not on disk: " + names, !names.contains(local.getName().replaceAll("\\..*$", "")));
+        final byte[] plain = java.nio.file.Files.readAllBytes(local.toPath());
+        try(java.util.stream.Stream<java.nio.file.Path> walk = java.nio.file.Files.walk(raw)) {
+            for(java.nio.file.Path file : walk.filter(java.nio.file.Files::isRegularFile).collect(java.util.stream.Collectors.toList())) {
+                check("the content is not on disk in " + file, !new String(java.nio.file.Files.readAllBytes(file), java.nio.charset.StandardCharsets.ISO_8859_1)
+                    .contains(new String(plain, java.nio.charset.StandardCharsets.ISO_8859_1).trim()));
+            }
+        }
+
+        // Lock again
+        onFx(() -> {
+            browser.getUpButton().fire();
+            return null;
+        });
+        awaitRendered(browser, directory);
+        select(browser, "secret");
+        check("unlocked vault offers to lock", "Lock Vault".equals(onFx(() -> browser.getMenuBar().getMenus().get(0).getItems().stream()
+            .filter(i -> i.getText() != null && i.getText().contains("Vault") && !i.getText().contains("Create")).findFirst().orElseThrow().getText())));
+        onFx(() -> {
+            Platform.runLater(browser::lockUnlockVault);
+            return null;
+        });
+        await("vault locked", () -> onFx(() -> !browser.isUnlocked(browser.getTable().getSelectionModel().getSelectedItem())));
+        return String.format("SMOKE OK vault listed=%s ondisk=encrypted", local.getName());
     }
 }
