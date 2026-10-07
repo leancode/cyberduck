@@ -14,7 +14,8 @@ concurrency:
 jobs:
   build:
     name: Build and test
-    runs-on: ubuntu-latest
+    # The dependencies of the deb are the library names of the machine it is built on. Install it on the same release.
+    runs-on: ubuntu-24.04
     permissions:
       checks: write
       pull-requests: write
@@ -32,7 +33,7 @@ jobs:
           java-version: 25
           cache: maven
       - name: Install libraries for JavaFX and a virtual display
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libgtk-3-0t64 libgl1 libxtst6
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libgtk-3-0t64 libgl1 libxtst6 rpm fakeroot desktop-file-utils
       - name: Build the modules the Linux GUI depends on
         run: >-
           mvn --no-transfer-progress --batch-mode install
@@ -46,6 +47,10 @@ jobs:
           SKIP_SIGN: true
       - name: Run the smoke tests
         run: xvfb-run -a linux/smoke.sh
+      - name: Check the desktop entry of the package
+        run: |
+          dpkg-deb -x linux/target/release/cyberduck_*.deb package
+          desktop-file-validate package/opt/cyberduck/lib/cyberduck-Cyberduck.desktop
       - name: Publish Test Report
         if: always() && github.event.pull_request.head.repo.fork == false
         uses: ScalableCapital/action-surefire-report@v2
@@ -59,3 +64,53 @@ jobs:
           name: linux-gui-test-reports
           path: linux/target/surefire-reports/
           if-no-files-found: ignore
+      - name: Archive DEB
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          path: linux/target/release/*.deb
+      - name: Archive RPM
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          path: linux/target/release/*.rpm
+
+  install-deb:
+    name: Install the deb in a clean Ubuntu
+    needs: build
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: '*.deb'
+          merge-multiple: true
+      - name: Install with the dependencies of the package
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ./cyberduck_*.deb xvfb
+      - name: Start the installed application
+        run: |
+          cyberduck --version
+          mkdir -p /tmp/files && touch /tmp/files/a /tmp/files/b
+          xvfb-run -a cyberduck --smoke list /tmp/files
+      - name: Remove
+        run: apt-get remove -y cyberduck && test ! -e /usr/bin/cyberduck && test ! -e /opt/cyberduck
+
+  install-rpm:
+    name: Install the rpm in a clean Fedora
+    needs: build
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: '*.rpm'
+          merge-multiple: true
+      - name: Install with the dependencies of the package
+        run: dnf install -y ./cyberduck-*.rpm xorg-x11-server-Xvfb
+      - name: Start the installed application
+        run: |
+          cyberduck --version
+          mkdir -p /tmp/files && touch /tmp/files/a /tmp/files/b
+          xvfb-run -a cyberduck --smoke list /tmp/files
+      - name: Remove
+        run: dnf remove -y cyberduck && test ! -e /usr/bin/cyberduck && test ! -e /opt/cyberduck
