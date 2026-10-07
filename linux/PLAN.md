@@ -1105,8 +1105,15 @@ later publishes packages.
   smoke modes `preferences` (opens the window from the menu, sets timeout 45 and retries 2) and `preferences-check`
   (second start shows 45), with `smoke.sh` grepping `connection.timeout.seconds=45` and `connection.retry=2` in the
   file between them. The layout of this window has not been looked at by a person yet.
-- [ ] **5.5 Info panel**: size, permissions (`UnixPermission` feature when present), modification
+- [x] **5.5 Info panel**: size, permissions (`UnixPermission` feature when present), modification
   date, URL (`UrlProvider`). Proof: smoke `info` reports the size of a known file.
+  **Executor note**: done. File, Get Info (Ctrl+I, enabled with exactly one selection) opens `InfoController`. It
+  shows the values of the listing at once (name, kind, folder, size as text and bytes, modification date, permissions
+  as symbol and octal mode, owner, group) and then runs two workers on the session: the core `AttributesWorker`, which
+  reads the attributes again from the server, and a small worker that asks the `UrlProvider` feature for the address. The
+  permission shown is whatever the protocol reports, so there is no editing yet. Proof: 2 tests for the labels and the
+  smoke mode `info`, which opens the window from the menu for a 1 MiB file with mode 640 and prints
+  `size=1048576 permissions=rw-r----- (640) url=file://...`, checked by `smoke.sh`.
 - [ ] **5.6 Cryptomator vaults**: Create Vault (`CreateVaultWorker`) and open an existing vault
   (`LoadVaultWorker` with `FxPasswordCallback`). Proof: integration test on the local filesystem
   creates a vault, uploads a file, lists it through the vault, and verifies the raw directory holds

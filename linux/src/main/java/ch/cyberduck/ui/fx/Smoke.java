@@ -105,6 +105,9 @@ public final class Smoke {
                     System.out.printf("SMOKE OK locale refresh=%s%n", onFx(() -> browser.getRefresh().getText()));
                     hold();
                     return 0;
+                case "info":
+                    System.out.println(info(browser, arguments.get(1), arguments.get(2)));
+                    return 0;
                 case "preferences":
                     preferences(browser);
                     System.out.println("SMOKE OK preferences");
@@ -1011,5 +1014,31 @@ public final class Smoke {
             window.getStage().close();
             return timeout;
         });
+    }
+
+    /**
+     * Open the properties of a file from the menu like a user. The size comes from the listing and the rest is read in
+     * the background.
+     *
+     * @return The line to print
+     */
+    private static String info(final BrowserController browser, final String directory, final String name) throws Exception {
+        mount(browser, directory);
+        select(browser, name);
+        onFx(() -> {
+            browser.getMenuBar().getMenus().get(0).getItems().stream().filter(i -> "Get Info".equals(i.getText())).findFirst().orElseThrow().fire();
+            return null;
+        });
+        await("info window", () -> onFx(() -> !browser.getInfos().isEmpty() && null != browser.getInfos().get(0).getStage() && browser.getInfos().get(0).getStage().isShowing()));
+        final InfoController info = browser.getInfos().get(0);
+        await("permissions shown", () -> onFx(() -> !info.getPermissions().getText().isEmpty()));
+        // The address is read from the session, which can take a moment
+        await("url shown", () -> onFx(() -> !info.getUrl().getText().isEmpty()));
+        final String line = onFx(() -> String.format("SMOKE OK info size=%d permissions=%s url=%s", info.getBytes(), info.getPermissions().getText(), info.getUrl().getText()));
+        onFx(() -> {
+            info.getStage().close();
+            return null;
+        });
+        return line;
     }
 }
