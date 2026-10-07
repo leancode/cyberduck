@@ -43,6 +43,7 @@ import ch.cyberduck.core.transfer.Transfer;
 import ch.cyberduck.core.transfer.TransferItem;
 import ch.cyberduck.core.transfer.TransferOptions;
 import ch.cyberduck.core.transfer.UploadTransfer;
+import ch.cyberduck.core.exception.HostParserException;
 import ch.cyberduck.core.features.Location;
 import ch.cyberduck.core.worker.CreateDirectoryWorker;
 import ch.cyberduck.core.worker.DeleteWorker;
@@ -525,6 +526,18 @@ public class BrowserController extends FxController {
         this.setWorkdir(typed.startsWith(String.valueOf(Path.DELIMITER))
             ? new Path(typed, EnumSet.of(Path.Type.directory))
             : new Path(workdir, typed, EnumSet.of(Path.Type.directory)));
+    }
+
+    /**
+     * Open the connection that a URL describes, for example {@code sftp://user@example.net/home}
+     */
+    void open(final String url) {
+        try {
+            this.mount(HostBuilder.fromUrl(ProtocolFactory.get(), url));
+        }
+        catch(HostParserException e) {
+            dialogs.error("Invalid URL", String.format("%s%n%n%s", url, e.getDetail()));
+        }
     }
 
     /**

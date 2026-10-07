@@ -91,4 +91,6 @@ else
     echo "skip sftp (Docker is not available)"
 fi
 
+smoke '^SMOKE OK url 3$' url "$work/list"
+
 echo "SMOKE SCRIPT OK"

@@ -109,6 +109,10 @@ public final class Smoke {
                     System.out.printf("SMOKE OK download progress=%d%n", download(browser, arguments.get(1), arguments.get(2)));
                     hold();
                     return 0;
+                case "url":
+                    System.out.printf("SMOKE OK url %d%n", url(browser, arguments.get(1)));
+                    hold();
+                    return 0;
                 case "tls":
                     tls(browser, arguments.get(1));
                     System.out.println("SMOKE OK tls");
@@ -320,6 +324,28 @@ public final class Smoke {
         });
         await("list emptied", () -> onFx(() -> transfers.getTable().getItems().isEmpty()));
         return events;
+    }
+
+    /**
+     * Open a URL like the desktop does when it hands one over, first one that is valid and then one that is not
+     *
+     * @return Number of rows in the table
+     */
+    static int url(final BrowserController browser, final String directory) throws Exception {
+        onFx(() -> {
+            browser.open(String.format("file://%s", directory));
+            return null;
+        });
+        awaitRendered(browser, directory);
+        final int rows = onFx(() -> browser.getTable().getItems().size());
+        onFx(() -> {
+            Platform.runLater(() -> browser.open("sftp://"));
+            return null;
+        });
+        await("error dialog for the invalid URL", () -> onFx(() -> null != dialog()));
+        check("names the problem", "Invalid URL".equals(onFx(() -> dialog().getHeaderText())));
+        closeDialog();
+        return rows;
     }
 
     /**

@@ -849,7 +849,7 @@ later publishes packages.
   - JVM options of the launcher: `--enable-native-access=ALL-UNNAMED`, UTF-8, `-Djna.nounpack=true`, `-Djna.noclasspath=true` and
     `-Djna.boot.library.path=$APPDIR` (jpackage replaces `$APPDIR`). These replace the preference entries of the CLI that did nothing.
 
-- [ ] **4.2 Desktop integration**
+- [x] **4.2 Desktop integration**
 
   **Do**
   - Add `--linux-shortcut`, `--linux-menu-group "Network;FileTransfer;"`, `--linux-app-category net`,
@@ -871,6 +871,19 @@ later publishes packages.
   ```
 
   **Commit**: `Add desktop entry and URL scheme handlers.`
+
+  **Done (executor notes)**
+  - jpackage only creates a desktop entry for packages, not for the app image. The proof therefore validates the entry inside the
+    deb: `dpkg-deb -x ... ; desktop-file-validate opt/cyberduck/lib/cyberduck-Cyberduck.desktop` prints nothing and exits 0. The
+    deb is now built before the app image, because jpackage refuses to write the `Cyberduck` folder when it already exists in the
+    destination, and `build.xml` clears the destination first.
+  - `setup/linux/Cyberduck.desktop` is copied to `Cyberduck.desktop` in jpackage's resource folder. jpackage logs
+    `Using custom package resource [Menu shortcut descriptor] (loaded from Cyberduck.desktop)`. The tokens are the ones of the
+    default template (`APPLICATION_LAUNCHER`, `APPLICATION_ICON`). `Exec` ends with `%U` so the desktop passes the clicked URL.
+    The entry registers `x-scheme-handler` for ftp, ftps, sftp, s3, dav and davs and sets `StartupWMClass`.
+  - `CyberduckApplication` opens the first argument that looks like a URL (`scheme://...`) with `BrowserController.open`.
+    An invalid URL shows the error dialog `Invalid URL`. Smoke `url` opens `file:///<folder>` (this protocol has no host, so the
+    form is `file:///path`, not `file://localhost/path`) and then `sftp://`, which must produce the dialog.
 
 - [ ] **4.3 `.deb` package**
 
