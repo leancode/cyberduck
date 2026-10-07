@@ -24,6 +24,7 @@ import ch.cyberduck.core.NullFilter;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathCache;
 import ch.cyberduck.core.Permission;
+import ch.cyberduck.core.ProtocolFactory;
 import ch.cyberduck.core.SessionPoolFactory;
 import ch.cyberduck.core.UserDateFormatterFactory;
 import ch.cyberduck.core.formatter.SizeFormatterFactory;
@@ -97,6 +98,7 @@ public class BrowserController extends FxController {
     private final TableView<Path> table = new TableView<>();
     private final ObservableList<Path> rows = FXCollections.observableArrayList();
     private final Label status = new Label();
+    private final Button connect = new Button("Connect");
     private final Button back = new Button("Back");
     private final Button up = new Button("Up");
     private final Button refresh = new Button("Refresh");
@@ -125,6 +127,7 @@ public class BrowserController extends FxController {
      * Directory requested but not yet listed. Used to ignore a listing that has been superseded.
      */
     private Path pending;
+    private ConnectionDialog connection;
     /**
      * Previously shown directories for the back button
      */
@@ -137,12 +140,13 @@ public class BrowserController extends FxController {
     }
 
     private BorderPane build() {
+        connect.setOnAction(event -> this.connect());
         back.setOnAction(event -> this.back());
         up.setOnAction(event -> this.up());
         refresh.setOnAction(event -> this.reload());
         location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, back, up, refresh, location);
+        final HBox top = new HBox(8, connect, back, up, refresh, location);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
 
@@ -407,6 +411,21 @@ public class BrowserController extends FxController {
         this.setWorkdir(typed.startsWith(String.valueOf(Path.DELIMITER))
             ? new Path(typed, EnumSet.of(Path.Type.directory))
             : new Path(workdir, typed, EnumSet.of(Path.Type.directory)));
+    }
+
+    /**
+     * Ask for a server and open the connection
+     */
+    void connect() {
+        connection = new ConnectionDialog(stage, ProtocolFactory.get());
+        connection.showAndWait().ifPresent(this::mount);
+    }
+
+    /**
+     * @return The connection dialog that was opened last
+     */
+    ConnectionDialog getConnectionDialog() {
+        return connection;
     }
 
     Button getBackButton() {

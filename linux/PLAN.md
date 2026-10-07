@@ -375,7 +375,7 @@ of a hang on failure.
   - Checked the test can fail: with the click count handler changed to 3 the scenario ends with
     `SMOKE FAIL Timeout waiting for directory ... shown` after the 60 s wait.
 
-- [ ] **2.3 Connection dialog**
+- [x] **2.3 Connection dialog**
 
   **Do**
   - `ConnectionDialog`: protocol `ComboBox` filled from `ProtocolFactory.get().find()`, hostname,
@@ -392,6 +392,18 @@ of a hang on failure.
   ```
 
   **Commit**: `Add connection dialog.`
+
+  **Done (executor notes)**
+  - `HostBuilder` takes a `ProtocolFactory` so tests do not depend on the global one. In the core a protocol is disabled unless a
+    profile enables it, so the test uses subclasses of `SFTPProtocol` and `LocalProtocol` that return `true` from `isEnabled()`.
+    `HostBuilderTest` has 8 tests, all passing.
+  - The dialog validates in an event filter on the Connect button and stays open with a red message on bad input. The Server field
+    accepts a full URL, which wins over the other fields. Fields the protocol does not allow to change are disabled.
+  - Smoke `connect <dir>` opens the real dialog through `BrowserController.connect()` (a nested event loop), selects the local
+    filesystem, types the folder and fires the Connect button. Output: `SMOKE OK connect 3`.
+  - Bug found while taking a screenshot: `Platform.exit()` with a dialog open crashes the JVM (`Key not associated with a running
+    event loop`, exit 134, `hs_err_pid*.log`). `CyberduckApplication.quit()` hides every window and dialog first and is used by
+    `--exit-after`. Step 2.11 must use `quit()` for the Quit command too. Delete any `hs_err_pid*.log` from the repository root.
 
 - [ ] **2.4 Prompts: login, password, host key, certificate trust, error alerts**
 

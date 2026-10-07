@@ -30,4 +30,6 @@ smoke '^SMOKE OK list 3$' list "$work/list"
 mkdir -p "$work/nav/a/b" && echo hello > "$work/nav/a/b/file.txt"
 smoke '^SMOKE OK navigate$' navigate "$work/nav"
 
+smoke '^SMOKE OK connect 3$' connect "$work/list"
+
 echo "SMOKE SCRIPT OK"
