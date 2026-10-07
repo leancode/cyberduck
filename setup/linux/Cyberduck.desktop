@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Cyberduck
+GenericName=File Transfer Client
+Comment=Browse and transfer files with servers and cloud storage
+Keywords=ftp;sftp;s3;webdav;transfer;upload;download;cloud;
+Exec=APPLICATION_LAUNCHER %U
+Icon=APPLICATION_ICON
+Terminal=false
+Type=Application
+Categories=Network;FileTransfer;
+MimeType=x-scheme-handler/ftp;x-scheme-handler/ftps;x-scheme-handler/sftp;x-scheme-handler/s3;x-scheme-handler/dav;x-scheme-handler/davs;
+StartupWMClass=ch.cyberduck.ui.fx.CyberduckApplication

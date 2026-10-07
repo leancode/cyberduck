@@ -56,6 +56,8 @@ public class CyberduckApplication extends Application {
         Platform.setImplicitExit(false);
         final BrowserController browser = MainController.get().newBrowser(stage);
         final List<String> arguments = this.getParameters().getRaw();
+        // The desktop starts the application with the URL that was clicked
+        arguments.stream().filter(argument -> argument.matches("^[A-Za-z][A-Za-z0-9+.-]*://.+")).findFirst().ifPresent(browser::open);
         final int exit = arguments.indexOf("--exit-after");
         if(exit >= 0 && exit + 1 < arguments.size()) {
             final double seconds = Double.parseDouble(arguments.get(exit + 1));

@@ -14,7 +14,8 @@
   ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   ~ GNU General Public License for more details.
   -->
-<project name="Cyberduck Linux" basedir=".">
+<project name="Cyberduck Linux" basedir="."
+         xmlns:unless="ant:unless">
 
     <import file="../build.xml"/>
 
@@ -44,12 +45,20 @@
                 <include name="*.lproj/*"/>
             </fileset>
         </copy>
+        <!-- Menu entry and the URL schemes opened by this application. The name is what jpackage looks for. -->
+        <copy file="${setup}/linux/Cyberduck.desktop" tofile="${build.resources}/Cyberduck.desktop"/>
+        <antcall target="jpackage">
+            <param name="type" value="deb"/>
+        </antcall>
         <antcall target="jpackage">
             <param name="type" value="app-image"/>
         </antcall>
     </target>
 
     <target name="jpackage">
+        <condition property="is-app-image">
+            <equals arg1="${type}" arg2="app-image"/>
+        </condition>
         <echo message="Create native ${type} bundle"/>
         <exec executable="${java.home}/bin/jpackage" failonerror="true">
             <arg value="--name"/>
@@ -89,6 +98,17 @@
             <arg value="${app.name}"/>
             <arg value="--vendor"/>
             <arg value="cyberduck.io"/>
+            <arg value="--license-file" unless:true="${is-app-image}"/>
+            <arg value="${license}" unless:true="${is-app-image}"/>
+            <arg value="--linux-shortcut" unless:true="${is-app-image}"/>
+            <arg value="--linux-menu-group" unless:true="${is-app-image}"/>
+            <arg value="Network;FileTransfer;" unless:true="${is-app-image}"/>
+            <arg value="--linux-app-category" unless:true="${is-app-image}"/>
+            <arg value="net" unless:true="${is-app-image}"/>
+            <arg value="--linux-package-name" unless:true="${is-app-image}"/>
+            <arg value="cyberduck" unless:true="${is-app-image}"/>
+            <arg value="--linux-deb-maintainer" unless:true="${is-app-image}"/>
+            <arg value="&lt;feedback@cyberduck.io&gt;" unless:true="${is-app-image}"/>
             <arg value="--type"/>
             <arg value="${type}"/>
             <arg value="--verbose"/>
