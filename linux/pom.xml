@@ -68,6 +68,29 @@
                             </execution>
                         </executions>
                     </plugin>
+                    <plugin>
+                        <!-- Declaring the plugin also enables the copy-dependencies executions of the parent -->
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>unpack-profiles</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>unpack</goal>
+                                </goals>
+                                <configuration>
+                                    <artifactItems>
+                                        <artifactItem>
+                                            <groupId>ch.cyberduck</groupId>
+                                            <artifactId>profiles</artifactId>
+                                            <version>${project.version}</version>
+                                        </artifactItem>
+                                    </artifactItems>
+                                    <outputDirectory>${project.build.directory}/profiles</outputDirectory>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                 </plugins>
             </build>
             <dependencies>

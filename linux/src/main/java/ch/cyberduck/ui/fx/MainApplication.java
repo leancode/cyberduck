@@ -15,7 +15,8 @@ package ch.cyberduck.ui.fx;
  * GNU General Public License for more details.
  */
 
-import ch.cyberduck.core.preferences.PreferencesFactory;
+import ch.cyberduck.core.Protocol;
+import ch.cyberduck.core.ProtocolFactory;
 
 import java.util.Arrays;
 import java.util.List;
@@ -33,9 +34,15 @@ public final class MainApplication {
 
     public static void main(final String... args) {
         final List<String> arguments = Arrays.asList(args);
+        Bootstrap.initialize();
         if(arguments.contains("--version")) {
-            PreferencesFactory.set(new LinuxApplicationPreferences());
             System.out.printf("Cyberduck %s%n", Version.get());
+            return;
+        }
+        if(arguments.contains("--list-protocols")) {
+            for(Protocol protocol : ProtocolFactory.get().find()) {
+                System.out.printf("%s\t%s%n", protocol.getIdentifier(), protocol.getDescription());
+            }
             return;
         }
         Application.launch(CyberduckApplication.class, args);
