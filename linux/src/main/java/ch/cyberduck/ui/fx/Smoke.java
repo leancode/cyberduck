@@ -30,7 +30,11 @@ import ch.cyberduck.core.worker.ListWorker;
 
 import java.util.EnumSet;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+
+import javafx.application.Platform;
 
 /**
  * Scripted scenarios run against the local filesystem without a server. Started with
@@ -47,9 +51,18 @@ public final class Smoke {
 
     /**
      * @param arguments Mode followed by the arguments of the mode
+     * @return True if the mode runs without a window
+     */
+    public static boolean isHeadless(final List<String> arguments) {
+        return !arguments.isEmpty() && "core-list".equals(arguments.get(0));
+    }
+
+    /**
+     * @param arguments Mode followed by the arguments of the mode
+     * @param browser   Window to drive or null for modes without a window
      * @return Process exit code
      */
-    public static int run(final List<String> arguments) {
+    public static int run(final List<String> arguments, final BrowserController browser) {
         watchdog();
         try {
             if(arguments.isEmpty()) {
@@ -57,8 +70,12 @@ public final class Smoke {
             }
             final String mode = arguments.get(0);
             switch(mode) {
+                case "core-list":
+                    System.out.printf("SMOKE OK core-list %d%n", list(arguments.get(1)));
+                    return 0;
                 case "list":
-                    System.out.printf("SMOKE OK list %d%n", list(arguments.get(1)));
+                    System.out.printf("SMOKE OK list %d%n", list(browser, arguments.get(1)));
+                    hold();
                     return 0;
                 default:
                     throw new IllegalArgumentException(String.format("Unknown smoke test mode %s", mode));
@@ -68,6 +85,17 @@ public final class Smoke {
             System.out.printf("SMOKE FAIL %s%n", e.getMessage());
             e.printStackTrace(System.out);
             return 1;
+        }
+    }
+
+    /**
+     * Keep the window open for the number of seconds in the environment variable SMOKE_HOLD, for example to take a
+     * screenshot.
+     */
+    private static void hold() throws InterruptedException {
+        final String seconds = System.getenv("SMOKE_HOLD");
+        if(seconds != null) {
+            TimeUnit.SECONDS.sleep(Long.parseLong(seconds));
         }
     }
 
@@ -84,6 +112,44 @@ public final class Smoke {
         }, "smoke-watchdog");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /**
+     * Mount the local filesystem at the directory in the browser window and wait for the table to show it.
+     *
+     * @return Number of rows in the table
+     */
+    static int list(final BrowserController browser, final String directory) throws Exception {
+        final Host host = new Host(new LocalProtocol(), new LocalProtocol().getDefaultHostname());
+        host.setDefaultPath(directory);
+        onFx(() -> {
+            browser.mount(host);
+            return null;
+        });
+        await("directory listed", () -> onFx(() -> null != browser.getRendered() && directory.equals(browser.getRendered().getAbsolute())));
+        return onFx(() -> browser.getTable().getItems().size());
+    }
+
+    /**
+     * Run on the JavaFX application thread and wait for the result
+     */
+    static <T> T onFx(final Callable<T> callable) throws Exception {
+        final FutureTask<T> task = new FutureTask<>(callable);
+        Platform.runLater(task);
+        return task.get(30, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Poll until the condition holds
+     */
+    static void await(final String description, final Callable<Boolean> condition) throws Exception {
+        final long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
+        while(!condition.call()) {
+            if(System.currentTimeMillis() > deadline) {
+                throw new IllegalStateException(String.format("Timeout waiting for %s", description));
+            }
+            TimeUnit.MILLISECONDS.sleep(100);
+        }
     }
 
     /**

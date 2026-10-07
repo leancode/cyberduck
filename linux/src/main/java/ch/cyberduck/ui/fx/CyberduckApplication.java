@@ -23,8 +23,6 @@ import java.util.List;
 import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.scene.Scene;
-import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
@@ -39,17 +37,23 @@ public class CyberduckApplication extends Application {
 
     @Override
     public void start(final Stage stage) {
-        stage.setTitle("Cyberduck");
-        stage.setScene(new Scene(new BorderPane(), 900, 600));
-        stage.show();
+        final BrowserController browser = new BrowserController(stage);
+        browser.show();
         final List<String> arguments = this.getParameters().getRaw();
-        final int index = arguments.indexOf("--exit-after");
-        if(index >= 0 && index + 1 < arguments.size()) {
-            final double seconds = Double.parseDouble(arguments.get(index + 1));
+        final int exit = arguments.indexOf("--exit-after");
+        if(exit >= 0 && exit + 1 < arguments.size()) {
+            final double seconds = Double.parseDouble(arguments.get(exit + 1));
             log.info("Exit after {} seconds", seconds);
             final PauseTransition timer = new PauseTransition(Duration.seconds(seconds));
             timer.setOnFinished(event -> Platform.exit());
             timer.play();
+        }
+        final int smoke = arguments.indexOf("--smoke");
+        if(smoke >= 0) {
+            // Scenario runs on its own thread and drives the window like a user would
+            final Thread thread = new Thread(() -> System.exit(Smoke.run(arguments.subList(smoke + 1, arguments.size()), browser)), "smoke");
+            thread.setDaemon(true);
+            thread.start();
         }
     }
 }
