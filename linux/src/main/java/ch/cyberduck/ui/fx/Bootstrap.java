@@ -18,6 +18,7 @@ package ch.cyberduck.ui.fx;
 import ch.cyberduck.core.BookmarkCollection;
 import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.ProtocolFactory;
+import ch.cyberduck.core.TransferCollection;
 import ch.cyberduck.core.exception.AccessDeniedException;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.serviceloader.AutoServiceLoaderFactory;
@@ -51,9 +52,17 @@ public final class Bootstrap {
     }
 
     /**
-     * Read the bookmarks from the application support folder.
+     * Read the bookmarks and the list of transfers from the application support folder.
      */
     public static void loadBookmarks() {
+        final TransferCollection transfers = TransferCollection.defaultCollection();
+        try {
+            transfers.load();
+            log.info("Loaded {} transfers", transfers.size());
+        }
+        catch(AccessDeniedException e) {
+            log.warn("Failure loading transfers. {}", e.getMessage());
+        }
         final BookmarkCollection bookmarks = BookmarkCollection.defaultCollection();
         try {
             bookmarks.load();

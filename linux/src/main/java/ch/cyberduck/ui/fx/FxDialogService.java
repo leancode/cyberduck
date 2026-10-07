@@ -19,9 +19,11 @@ import ch.cyberduck.core.Credentials;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.LoginOptions;
 import ch.cyberduck.core.threading.DefaultMainAction;
+import ch.cyberduck.core.transfer.TransferAction;
 
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -30,8 +32,10 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
@@ -115,6 +119,43 @@ public class FxDialogService implements DialogService {
             }
             final boolean accepted = alert.showAndWait().filter(type -> type == accept).isPresent();
             return new Confirmation(accepted, suppressible && suppress.isSelected());
+        });
+    }
+
+    @Override
+    public TransferAction action(final String title, final String message, final List<TransferAction> actions) {
+        return this.onApplicationThread(() -> {
+            final Dialog<TransferAction> dialog = new Dialog<>();
+            this.owner(dialog);
+            dialog.setTitle(title);
+            dialog.setHeaderText(title);
+            final ButtonType accept = new ButtonType("Continue", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(accept, ButtonType.CANCEL);
+            final Label text = new Label(message);
+            text.setWrapText(true);
+            text.setMaxWidth(420);
+            final ComboBox<TransferAction> choices = new ComboBox<>();
+            choices.getItems().setAll(actions);
+            choices.setMaxWidth(Double.MAX_VALUE);
+            final Label description = new Label();
+            description.setWrapText(true);
+            description.setMaxWidth(420);
+            final javafx.util.Callback<javafx.scene.control.ListView<TransferAction>, ListCell<TransferAction>> cells = view -> new ListCell<>() {
+                @Override
+                protected void updateItem(final TransferAction item, final boolean empty) {
+                    super.updateItem(item, empty);
+                    setText(empty || null == item ? null : item.getTitle());
+                }
+            };
+            choices.setCellFactory(cells);
+            choices.setButtonCell(cells.call(null));
+            choices.valueProperty().addListener((observable, previous, selected) -> description.setText(null == selected ? StringUtils.EMPTY : selected.getDescription()));
+            choices.setValue(actions.isEmpty() ? null : actions.get(0));
+            final javafx.scene.layout.VBox content = new javafx.scene.layout.VBox(10, text, choices, description);
+            content.setPadding(new Insets(12));
+            dialog.getDialogPane().setContent(content);
+            dialog.setResultConverter(type -> type == accept ? choices.getValue() : null);
+            return dialog.showAndWait().orElse(null);
         });
     }
 

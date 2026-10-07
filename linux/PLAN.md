@@ -526,7 +526,7 @@ of a hang on failure.
     edits the name, checks the file content, deletes after confirmation and checks the file is gone.
   - Passwords are not stored yet. Saving them needs the keychain step in Phase 5, so every connect asks for the password.
 
-- [ ] **2.7 Download with overwrite prompt**
+- [x] **2.7 Download with overwrite prompt**
 
   **Do**
   - Download button: for the selected rows create `new DownloadTransfer(host, roots)` and run it
@@ -551,6 +551,24 @@ of a hang on failure.
   ```
 
   **Commit**: `Add download transfer with overwrite prompt.`
+
+  **Done (executor notes)**
+  - `TransferController` (one per application, `TransferController.get()`) implements `TransferListener` and starts a
+    `TransferCollectionBackgroundAction` with its own pools for source and destination, as the macOS controller does. It adds the
+    transfer to `TransferCollection`, which `Bootstrap` loads at startup. The transfer window comes in step 2.9.
+  - `FxTransferPrompt` has the constructor `(FxController, Transfer, SessionPool, SessionPool)` that
+    `TransferPromptControllerFactory` looks for. It is registered for every `Transfer.Type`. Existing folders are merged without
+    asking. `FxTransferErrorCallback` asks whether to continue and rethrows the failure when the user cancels.
+    `DialogService` gained `action(...)`, which shows a choice of `TransferAction` with its description.
+  - The default action preference is `ask`, so the prompt only appears when the local file already exists. Smoke `download`
+    therefore downloads once without a prompt, replaces the local file with other content, downloads again, finds the real
+    `File exists` dialog (with the old content still in place while it is open), picks Overwrite and checks the content is back.
+    `smoke.sh` then compares `sha256sum`.
+  - `queue.download.folder` defaults to `~/Downloads`. The Download button is enabled while rows are selected (multiple selection).
+  - `transferDidProgress` is driven by a timer in the core, so a 1 MiB local copy finishes before any event. Step 2.9 must slow the
+    transfer down (`transfer.setBandwidth`) to observe progress. Smoke prints `progress=0` for now.
+  - Not yet verified: whether a stateful protocol (SFTP) asks for the password again for the transfer connection. Step 2.12
+    checks this against the container.
 
 - [ ] **2.8 Upload**
 

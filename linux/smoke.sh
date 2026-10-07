@@ -39,4 +39,8 @@ smoke '^SMOKE OK connect-fail ' connect-fail
 
 smoke '^SMOKE OK bookmarks$' bookmarks "$work/list"
 
+mkdir -p "$work/down-src" "$work/down-dst" && head -c 1048576 /dev/urandom > "$work/down-src/f.bin"
+smoke '^SMOKE OK download progress=[0-9]+$' download "$work/down-src" "$work/down-dst"
+[ "$(sha256sum < "$work/down-src/f.bin")" = "$(sha256sum < "$work/down-dst/f.bin")" ] || fail "download: checksum of the downloaded file differs"
+
 echo "SMOKE SCRIPT OK"

@@ -24,6 +24,8 @@ import ch.cyberduck.core.PathCache;
 import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.ProtocolFactory;
 import ch.cyberduck.core.SessionPoolFactory;
+import ch.cyberduck.core.preferences.PreferencesFactory;
+import ch.cyberduck.core.transfer.TransferAction;
 import ch.cyberduck.core.nio.LocalProtocol;
 import ch.cyberduck.core.pool.SessionPool;
 import ch.cyberduck.core.threading.SessionBackgroundAction;
@@ -92,6 +94,10 @@ public final class Smoke {
                     return 0;
                 case "connect":
                     System.out.printf("SMOKE OK connect %d%n", connect(browser, arguments.get(1)));
+                    hold();
+                    return 0;
+                case "download":
+                    System.out.printf("SMOKE OK download progress=%d%n", download(browser, arguments.get(1), arguments.get(2)));
                     hold();
                     return 0;
                 case "bookmarks":
@@ -189,6 +195,61 @@ public final class Smoke {
         });
         awaitRendered(browser, directory);
         return onFx(() -> browser.getTable().getItems().size());
+    }
+
+    /**
+     * Download <code>f.bin</code> from the source folder. Then replace the local copy and download again: the user is
+     * asked what to do with the existing file and chooses to overwrite it.
+     *
+     * @return Number of progress notifications received for the transfers
+     */
+    static int download(final BrowserController browser, final String source, final String target) throws Exception {
+        mount(browser, source);
+        PreferencesFactory.get().setProperty("queue.download.folder", target);
+        final java.nio.file.Path original = java.nio.file.Paths.get(source, "f.bin");
+        final java.nio.file.Path copy = java.nio.file.Paths.get(target, "f.bin");
+        final TransferController transfers = TransferController.get();
+
+        select(browser, "f.bin");
+        onFx(() -> {
+            browser.getDownloadButton().fire();
+            return null;
+        });
+        await("first download", () -> transfers.getCompleted() >= 1);
+        check("downloaded content is the same", -1 == java.nio.file.Files.mismatch(original, copy));
+
+        // The local file now differs, so the second download has to ask
+        java.nio.file.Files.write(copy, "old local content".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        select(browser, "f.bin");
+        onFx(() -> {
+            browser.getDownloadButton().fire();
+            return null;
+        });
+        await("file exists dialog", () -> onFx(() -> null != dialog()));
+        check("asks about the existing file", "File exists".equals(onFx(() -> dialog().getHeaderText())));
+        check("old content is still there while asking", "old local content".equals(new String(java.nio.file.Files.readAllBytes(copy), java.nio.charset.StandardCharsets.UTF_8)));
+        onFx(() -> {
+            final DialogPane pane = dialog();
+            @SuppressWarnings("unchecked") final javafx.scene.control.ComboBox<TransferAction> choices = (javafx.scene.control.ComboBox<TransferAction>) pane.lookup(".combo-box");
+            choices.setValue(TransferAction.overwrite);
+            ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
+            return null;
+        });
+        await("second download", () -> transfers.getCompleted() >= 2);
+        check("overwritten with the remote content", -1 == java.nio.file.Files.mismatch(original, copy));
+        return transfers.getProgressEvents();
+    }
+
+    /**
+     * Select the row with the name in the table
+     */
+    static void select(final BrowserController browser, final String name) throws Exception {
+        onFx(() -> {
+            final Path file = browser.getTable().getItems().stream().filter(p -> p.getName().equals(name)).findFirst().orElseThrow(() -> new IllegalStateException(String.format("No row %s", name)));
+            browser.getTable().getSelectionModel().clearSelection();
+            browser.getTable().getSelectionModel().select(file);
+            return null;
+        });
     }
 
     /**

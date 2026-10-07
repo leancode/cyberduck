@@ -24,6 +24,7 @@ import ch.cyberduck.core.local.ExecApplicationLauncher;
 import ch.cyberduck.core.preferences.DefaultPreferences;
 import ch.cyberduck.core.preferences.UserHomeSupportDirectoryFinder;
 import ch.cyberduck.core.proxy.EnvironmentVariableProxyFinder;
+import ch.cyberduck.core.transfer.Transfer;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -147,6 +148,7 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
         super.setDefaults();
 
         this.setDefault("local.user.home", userHome());
+        this.setDefault("queue.download.folder", Paths.get(userHome(), "Downloads").toString());
         // Same folder name as the bundled profiles unpacked next to the application resources
         this.setDefault("profiles.folder.name", "profiles");
         this.setDefault("ssh.authentication.agent.enable", String.valueOf(false));
@@ -173,6 +175,10 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
         this.setDefault("factory.certificatetrustcallback.class", FxCertificateTrustCallback.class.getName());
         this.setDefault("factory.certificatestore.class", FxCertificateStore.class.getName());
         this.setDefault("factory.alertcallback.class", FxAlertCallback.class.getName());
+        this.setDefault("factory.transfererrorcallback.class", FxTransferErrorCallback.class.getName());
+        for(Transfer.Type type : Transfer.Type.values()) {
+            this.setDefault(String.format("factory.transferpromptcallback.%s.class", type.name()), FxTransferPrompt.class.getName());
+        }
         // Replaced by the Secret Service implementation later
         this.setDefault("factory.passwordstore.class", UnsecureHostPasswordStore.class.getName());
     }
