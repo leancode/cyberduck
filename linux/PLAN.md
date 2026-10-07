@@ -1114,10 +1114,24 @@ later publishes packages.
   permission shown is whatever the protocol reports, so there is no editing yet. Proof: 2 tests for the labels and the
   smoke mode `info`, which opens the window from the menu for a 1 MiB file with mode 640 and prints
   `size=1048576 permissions=rw-r----- (640) url=file://...`, checked by `smoke.sh`.
-- [ ] **5.6 Cryptomator vaults**: Create Vault (`CreateVaultWorker`) and open an existing vault
+- [x] **5.6 Cryptomator vaults**: Create Vault (`CreateVaultWorker`) and open an existing vault
   (`LoadVaultWorker` with `FxPasswordCallback`). Proof: integration test on the local filesystem
   creates a vault, uploads a file, lists it through the vault, and verifies the raw directory holds
   only encrypted names.
+  **Executor note**: done. `LinuxApplicationPreferences` registers `DefaultVaultProvider`; the vault registry is already
+  part of every pool made by `SessionPoolFactory`. File, Create Vault… opens `VaultDialog` (name, passphrase twice,
+  keep in keyring; Create stays disabled until the two passphrases are equal) and runs `CreateVaultWorker`. File,
+  Unlock Vault / Lock Vault (the text follows the state of the selected folder) runs `LoadVaultWorker` with the
+  password callback or `LockVaultWorker`. A vault folder that is entered unlocks itself with the same prompt.
+  Findings: (1) A transfer opens its own connection with its own, still locked, registry, so an upload into a vault asks for
+  the passphrase again unless it was kept in the keyring. This is the behavior of the macOS application too. (2)
+  The core helper `ContentWriter` writes through the underlying feature and therefore does not encrypt, so the test
+  uses the features of the session. (3) With a locked keyring the save of the passphrase waits for the timeout of
+  `SecretToolPasswordStore`, so tests and smoke runs do not keep the passphrase. Proof: `VaultIntegrationTest` creates a
+  vault on a local folder, unlocks it, writes and reads a file through the vault, lists the real name through
+  `ListWorker`, checks that neither the name nor the text is on disk, and locks it. The smoke mode `vault` does the
+  same with the real dialogs (refused mismatch, prompt, upload through a transfer) and `smoke.sh` greps the vault folder
+  for the name and the text. It runs with a home of its own, because the finished upload stays in the list of transfers.
 - [ ] **5.7 Synchronize and copy transfers**: `SyncTransfer` with its prompt UI, in-session copy via
   `CopyWorker`. Proof: smoke `sync` between two local directories.
 - [ ] **5.8 Drag and drop**: drop files from the desktop onto the browser to upload. Proof: manual.
