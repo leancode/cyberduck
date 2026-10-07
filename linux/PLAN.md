@@ -92,7 +92,7 @@ Read these before every session.
 
 ## Phase 1: Module skeleton
 
-- [ ] **1.1 Create the `linux` Maven module and register it in the reactor**
+- [x] **1.1 Create the `linux` Maven module and register it in the reactor**
 
   **Do**
   - Create `linux/pom.xml` with parent `ch.cyberduck:parent` (relativePath `../pom.xml`, same
@@ -102,9 +102,9 @@ Read these before every session.
     `javafx.version` to the chosen 25.x, and `maven.main.skip`/`maven.test.skip` to `true`.
   - Add a profile `linux` activated by `<os><family>Linux</family></os>` that sets
     `maven.main.skip` and `maven.test.skip` to `false` and declares the dependencies:
-    `ch.cyberduck:core`, `ch.cyberduck:protocols`, `ch.cyberduck:cryptomator`,
+    `ch.cyberduck:core`, `ch.cyberduck:protocols` (type `pom`), `ch.cyberduck:cryptomator`,
     `org.openjfx:javafx-controls:${javafx.version}`, and for tests `ch.cyberduck:test`
-    (type `test-jar`, scope `test`, copy the block from `cli/pom.xml`) plus JUnit as in `cli/pom.xml`.
+    (type `pom`, scope `test`, copy the block from `cli/pom.xml`; it brings in JUnit).
     Copy the `arm64`/`arm32`/`x86_64` profiles from `cli/linux/pom.xml` that add the
     `net.java.dev.jna:libjnidispatch` `.so` dependency (drop the jansi entries).
   - The parent's `enforce-bytecode-version` rule caps dependencies at Java 8 bytecode and will
@@ -126,6 +126,14 @@ Read these before every session.
   with the `linux` classifier.
 
   **Commit**: `Add linux module skeleton.`
+
+  **Done (executor notes)**
+  - JavaFX is `25.0.4`. JavaFX 25 needs JDK 23 or newer, so the machine must have JDK 25. On Ubuntu 24.04:
+    `sudo apt-get install -y openjdk-25-jdk` (and export `JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64`).
+  - The proof's last command needs the tree written to a file, because `-q` hides the tree:
+    `mvn -pl linux dependency:tree -DoutputFile=target/tree.txt && grep javafx linux/target/tree.txt`.
+  - Verified the exclusion is needed: with it removed the enforcer fails with
+    "Restricted to JDK 8 yet org.openjfx:javafx-controls ... targeted to JDK 23".
 
 - [ ] **1.2 Launcher, empty window, and `run.sh`**
 
