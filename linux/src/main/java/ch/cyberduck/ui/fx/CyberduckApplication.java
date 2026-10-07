@@ -52,8 +52,9 @@ public class CyberduckApplication extends Application {
 
     @Override
     public void start(final Stage stage) {
-        final BrowserController browser = new BrowserController(stage);
-        browser.show();
+        // The application ends when the last browser window has been closed and everything has been saved
+        Platform.setImplicitExit(false);
+        final BrowserController browser = MainController.get().newBrowser(stage);
         final List<String> arguments = this.getParameters().getRaw();
         final int exit = arguments.indexOf("--exit-after");
         if(exit >= 0 && exit + 1 < arguments.size()) {
@@ -66,7 +67,13 @@ public class CyberduckApplication extends Application {
         final int smoke = arguments.indexOf("--smoke");
         if(smoke >= 0) {
             // Scenario runs on its own thread and drives the window like a user would
-            final Thread thread = new Thread(() -> System.exit(Smoke.run(arguments.subList(smoke + 1, arguments.size()), browser)), "smoke");
+            final List<String> scenario = arguments.subList(smoke + 1, arguments.size());
+            final Thread thread = new Thread(() -> {
+                final int code = Smoke.run(scenario, browser);
+                if(code != 0 || !Smoke.endsApplication(scenario)) {
+                    System.exit(code);
+                }
+            }, "smoke");
             thread.setDaemon(true);
             thread.start();
         }

@@ -51,4 +51,11 @@ mkdir -p "$work/ops"
 smoke '^SMOKE OK fileops$' fileops "$work/ops"
 [ -z "$(ls -A "$work/ops")" ] || fail "fileops: expected an empty folder but found $(ls -A "$work/ops")"
 
+# Quitting must end the process by itself. A hang is a failure, so the timeout is short.
+mkdir -p "$work/win-one" "$work/win-two" && touch "$work/win-one/a" "$work/win-one/b" "$work/win-two/x"
+out="$(timeout 30 "$bin" --smoke windows "$work/win-one" "$work/win-two" 2>&1)" || { echo "$out"; fail "windows: failed or did not exit by itself within 30 seconds"; }
+echo "$out" | grep -q '^SMOKE OK windows$' || { echo "$out"; fail "windows: expected 'SMOKE OK windows'"; }
+[ -f "$HOME/.duck/cyberduck.properties" ] || fail "windows: preferences were not saved when quitting"
+echo "ok windows"
+
 echo "SMOKE SCRIPT OK"

@@ -225,6 +225,30 @@ public class TransferController extends FxController implements TransferListener
     }
 
     /**
+     * @return Number of transfers that are running
+     */
+    public int getRunning() {
+        int running = 0;
+        for(Transfer transfer : new ArrayList<>(collection)) {
+            if(transfer.isRunning()) {
+                running++;
+            }
+        }
+        return running;
+    }
+
+    /**
+     * Cancel all running transfers
+     */
+    public void stopAll() {
+        for(BackgroundAction<?> action : registry.toArray(new BackgroundAction[registry.size()])) {
+            if(action instanceof TransferBackgroundAction) {
+                action.cancel();
+            }
+        }
+    }
+
+    /**
      * Show the window with the transfers. Call on the JavaFX application thread.
      */
     public void show() {

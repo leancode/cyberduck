@@ -653,7 +653,7 @@ of a hang on failure.
     step 2.12 renames a file on the SFTP container.
   - Smoke `fileops` uses the real dialogs, checks the files on disk, and `smoke.sh` checks the folder is empty at the end.
 
-- [ ] **2.11 Disconnect, window close, multiple windows**
+- [x] **2.11 Disconnect, window close, multiple windows**
 
   **Do**
   - Closing a browser window runs `DisconnectBackgroundAction` on its pool. File > New Browser
@@ -668,6 +668,18 @@ of a hang on failure.
   ```
 
   **Commit**: `Disconnect on window close and support multiple browsers.`
+
+  **Done (executor notes)**
+  - `MainController` owns the browser windows. The window button is intercepted: it disconnects first (`DisconnectBackgroundAction`),
+    then hides the window and releases it. Closing the last window quits. Quit asks first if transfers are running, stops them,
+    disconnects every browser, saves the bookmark, transfer and preference collections, closes dialogs and calls `Platform.exit()`.
+    `Platform.setImplicitExit(false)` makes this explicit.
+  - Every browser window has a File menu (New Browser, Open Connection, Disconnect, Close Window, Quit) and a Window menu
+    (Transfers), with Ctrl shortcuts. Each window removes its listener from the shared bookmark collection when it is closed.
+  - The core's threads are daemon threads, so the JVM ends by itself once `Application.launch` returns. No `System.exit` is needed.
+    The original wording said to extend `--smoke list`. A new scenario `windows` does it instead: two windows with their own
+    folders, close one with a real `WINDOW_CLOSE_REQUEST` event, then Quit from the menu. The scenario does not call
+    `System.exit`, and `smoke.sh` runs it under `timeout 30`, so a hang fails. It also checks that preferences were saved.
 
 - [ ] **2.12 Manual acceptance of the usable minimum**
 
