@@ -101,6 +101,11 @@ public final class Smoke {
                     System.out.printf("SMOKE OK download progress=%d%n", download(browser, arguments.get(1), arguments.get(2)));
                     hold();
                     return 0;
+                case "fileops":
+                    fileops(browser, arguments.get(1));
+                    System.out.println("SMOKE OK fileops");
+                    hold();
+                    return 0;
                 case "upload":
                     System.out.printf("SMOKE OK upload rows=%d%n", upload(browser, arguments.get(1), arguments.get(2)));
                     hold();
@@ -288,6 +293,76 @@ public final class Smoke {
         });
         await("list emptied", () -> onFx(() -> transfers.getTable().getItems().isEmpty()));
         return events;
+    }
+
+    /**
+     * Create a folder, rename it, delete a file and the folder, each through its dialog
+     */
+    static void fileops(final BrowserController browser, final String directory) throws Exception {
+        final java.nio.file.Path root = java.nio.file.Paths.get(directory);
+        mount(browser, directory);
+        check("starts empty", names(browser).isEmpty());
+
+        // New folder
+        onFx(() -> {
+            Platform.runLater(browser::newFolder);
+            return null;
+        });
+        answerInput("n");
+        await("folder shown", () -> names(browser).contains("n"));
+        check("folder exists", java.nio.file.Files.isDirectory(root.resolve("n")));
+        check("new folder is selected", "n".equals(onFx(() -> browser.getTable().getSelectionModel().getSelectedItem().getName())));
+
+        // Rename it
+        onFx(() -> {
+            Platform.runLater(browser::rename);
+            return null;
+        });
+        answerInput("m");
+        await("renamed shown", () -> names(browser).contains("m") && !names(browser).contains("n"));
+        check("renamed on disk", java.nio.file.Files.isDirectory(root.resolve("m")) && !java.nio.file.Files.exists(root.resolve("n")));
+        check("renamed is selected", "m".equals(onFx(() -> browser.getTable().getSelectionModel().getSelectedItem().getName())));
+
+        // A file that appears behind the back of the browser is shown after reload
+        java.nio.file.Files.write(root.resolve("file.txt"), "text".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        onFx(() -> {
+            browser.reload();
+            return null;
+        });
+        await("file shown after reload", () -> names(browser).contains("file.txt"));
+
+        // Delete after confirmation
+        for(String name : List.of("file.txt", "m")) {
+            select(browser, name);
+            onFx(() -> {
+                Platform.runLater(browser::delete);
+                return null;
+            });
+            await("confirmation", () -> onFx(() -> null != dialog()));
+            check("confirmation names the item", onFx(() -> dialog().getHeaderText()).contains(name));
+            check("not deleted before confirming", java.nio.file.Files.exists(root.resolve(name)));
+            onFx(() -> {
+                final DialogPane pane = dialog();
+                ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
+                return null;
+            });
+            await(String.format("%s removed", name), () -> !names(browser).contains(name));
+            check("deleted on disk", !java.nio.file.Files.exists(root.resolve(name)));
+        }
+        check("empty again", names(browser).isEmpty());
+    }
+
+    /**
+     * Type the text in the dialog that asks for a line of text and press OK
+     */
+    static void answerInput(final String text) throws Exception {
+        await("input dialog", () -> onFx(() -> null != dialog() && null != dialog().lookup(".text-field")));
+        onFx(() -> {
+            final DialogPane pane = dialog();
+            ((javafx.scene.control.TextField) pane.lookup(".text-field")).setText(text);
+            ((javafx.scene.control.Button) pane.lookupButton(javafx.scene.control.ButtonType.OK)).fire();
+            return null;
+        });
     }
 
     interface Check {

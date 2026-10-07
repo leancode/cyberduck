@@ -25,7 +25,9 @@ import ch.cyberduck.core.LocalFactory;
 import ch.cyberduck.core.NullFilter;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathCache;
+import ch.cyberduck.core.LoginCallbackFactory;
 import ch.cyberduck.core.Permission;
+import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.ProtocolFactory;
 import ch.cyberduck.core.SessionPoolFactory;
 import ch.cyberduck.core.UserDateFormatterFactory;
@@ -41,7 +43,11 @@ import ch.cyberduck.core.transfer.Transfer;
 import ch.cyberduck.core.transfer.TransferItem;
 import ch.cyberduck.core.transfer.TransferOptions;
 import ch.cyberduck.core.transfer.UploadTransfer;
+import ch.cyberduck.core.features.Location;
+import ch.cyberduck.core.worker.CreateDirectoryWorker;
+import ch.cyberduck.core.worker.DeleteWorker;
 import ch.cyberduck.core.worker.ListWorker;
+import ch.cyberduck.core.worker.MoveWorker;
 import ch.cyberduck.core.worker.MountWorker;
 import ch.cyberduck.ui.browser.DefaultBrowserFilter;
 import ch.cyberduck.ui.browser.DownloadDirectoryFinder;
@@ -62,8 +68,10 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -124,6 +132,9 @@ public class BrowserController extends FxController {
     private final Button download = new Button("Download");
     private final Button upload = new Button("Upload");
     private final Button transfers = new Button("Transfers");
+    private final Button newFolder = new Button("New Folder");
+    private final Button rename = new Button("Rename");
+    private final Button delete = new Button("Delete");
     private final StringProperty summary = new SimpleStringProperty(StringUtils.EMPTY);
 
     private final Cache<Path> cache = new PathCache(preferences.getInteger("browser.cache.size"));
@@ -151,6 +162,11 @@ public class BrowserController extends FxController {
      */
     private Path pending;
     private ConnectionDialog connection;
+    private final DialogService dialogs = new FxDialogService(this);
+    /**
+     * Select this file after the next listing
+     */
+    private Path selectAfterRender;
     private BookmarkController bookmarks;
     /**
      * Previously shown directories for the back button
@@ -175,12 +191,18 @@ public class BrowserController extends FxController {
         download.setOnAction(event -> this.download());
         upload.setOnAction(event -> this.upload());
         transfers.setOnAction(event -> TransferController.get().show());
+        newFolder.setOnAction(event -> this.newFolder());
+        rename.setOnAction(event -> this.rename());
+        delete.setOnAction(event -> this.delete());
+        newFolder.disableProperty().bind(Bindings.createBooleanBinding(() -> null == rendered, renderedProperty));
+        rename.disableProperty().bind(Bindings.size(table.getSelectionModel().getSelectedItems()).isNotEqualTo(1));
+        delete.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
         upload.disableProperty().bind(Bindings.createBooleanBinding(() -> null == rendered, renderedProperty));
         download.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, download, upload, transfers, location);
+        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, download, upload, newFolder, rename, delete, transfers, location);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
 
@@ -487,6 +509,112 @@ public class BrowserController extends FxController {
     }
 
     /**
+     * Ask for a name and create a folder in the folder that is shown
+     */
+    void newFolder() {
+        if(!this.isMounted() || null == workdir) {
+            return;
+        }
+        final String name = dialogs.input("New Folder", "Enter the name of the new folder", "untitled folder");
+        if(StringUtils.isBlank(name)) {
+            return;
+        }
+        final Path folder = new Path(workdir, StringUtils.trim(name), EnumSet.of(Path.Type.directory));
+        this.background(new WorkerBackgroundAction<>(this, pool, new CreateDirectoryWorker(folder, Location.unknown.getIdentifier()) {
+            @Override
+            public void cleanup(final Path created) {
+                super.cleanup(created);
+                if(created != null) {
+                    selectAfterRender = folder;
+                }
+                reload();
+            }
+        }));
+    }
+
+    /**
+     * Ask for a new name for the selected file
+     */
+    void rename() {
+        if(!this.isMounted() || null == workdir) {
+            return;
+        }
+        final List<Path> selected = new ArrayList<>(table.getSelectionModel().getSelectedItems());
+        if(selected.size() != 1) {
+            return;
+        }
+        final Path file = selected.get(0);
+        final String name = dialogs.input("Rename", String.format("Enter the new name for %s", file.getName()), file.getName());
+        if(StringUtils.isBlank(name) || StringUtils.trim(name).equals(file.getName())) {
+            return;
+        }
+        final Path renamed = new Path(file.getParent(), StringUtils.trim(name), file.getType());
+        // Moving needs a second connection to the same server to borrow while the first is in use
+        final SessionPool target = pool.getHost().getProtocol().getStatefulness() == Protocol.Statefulness.stateful
+            ? SessionPoolFactory.create(this, pool.getHost()) : pool;
+        this.background(new WorkerBackgroundAction<>(this, pool,
+            new MoveWorker(Collections.singletonMap(file, renamed), target, cache, this, LoginCallbackFactory.get(this)) {
+                @Override
+                public void cleanup(final Map<Path, Path> result) {
+                    super.cleanup(result);
+                    if(target != pool) {
+                        target.shutdown();
+                    }
+                    if(file.isDirectory()) {
+                        cache.invalidate(file);
+                    }
+                    if(result != null && !result.isEmpty()) {
+                        selectAfterRender = renamed;
+                    }
+                    reload();
+                }
+            }));
+    }
+
+    /**
+     * Delete the selected files after confirmation
+     */
+    void delete() {
+        if(!this.isMounted() || null == workdir) {
+            return;
+        }
+        final List<Path> selected = new ArrayList<>(table.getSelectionModel().getSelectedItems());
+        if(selected.isEmpty()) {
+            return;
+        }
+        final String names = selected.stream().limit(5).map(Path::getName).collect(Collectors.joining(", "));
+        if(!dialogs.confirm(selected.size() == 1 ? String.format("Delete %s", selected.get(0).getName()) : String.format("Delete %d items", selected.size()),
+            String.format("The following will be deleted from the server and cannot be restored: %s%s", names, selected.size() > 5 ? ", …" : StringUtils.EMPTY),
+            "Delete", "Cancel", false).accepted()) {
+            return;
+        }
+        this.background(new WorkerBackgroundAction<>(this, pool, new DeleteWorker(LoginCallbackFactory.get(this), selected, this) {
+            @Override
+            public void cleanup(final List<Path> deleted) {
+                super.cleanup(deleted);
+                for(Path file : selected) {
+                    if(file.isDirectory()) {
+                        cache.invalidate(file);
+                    }
+                }
+                reload();
+            }
+        }));
+    }
+
+    Button getNewFolderButton() {
+        return newFolder;
+    }
+
+    Button getRenameButton() {
+        return rename;
+    }
+
+    Button getDeleteButton() {
+        return delete;
+    }
+
+    /**
      * Choose files on this computer and upload them to the folder that is shown
      */
     void upload() {
@@ -574,6 +702,15 @@ public class BrowserController extends FxController {
         rows.setAll(list.toList());
         rendered = directory;
         renderedProperty.set(directory);
+        if(selectAfterRender != null) {
+            final Path select = selectAfterRender;
+            selectAfterRender = null;
+            rows.stream().filter(p -> p.equals(select)).findFirst().ifPresent(p -> {
+                table.getSelectionModel().clearSelection();
+                table.getSelectionModel().select(p);
+                table.scrollTo(p);
+            });
+        }
         summary.set(String.format("%d items", rows.size()));
     }
 }

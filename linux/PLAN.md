@@ -628,7 +628,7 @@ of a hang on failure.
     separate argument, unlike `ExecApplicationLauncher`, which builds one command string and breaks on paths with spaces.
   - Cosmetic follow-up: the live status text is long and gets cut off in the Status column. Widen the column or shorten the text.
 
-- [ ] **2.10 File operations: new folder, delete, rename**
+- [x] **2.10 File operations: new folder, delete, rename**
 
   **Do**
   - New Folder: prompt for a name, run `CreateDirectoryWorker`. Delete: confirm, run `DeleteWorker`
@@ -642,6 +642,16 @@ of a hang on failure.
   ```
 
   **Commit**: `Add folder creation, delete and rename.`
+
+  **Done (executor notes)**
+  - New Folder, Rename and Delete buttons run `CreateDirectoryWorker`, `MoveWorker` and `DeleteWorker`, and list the folder again
+    afterwards. A new or renamed item is selected after the reload. Delete asks first and names the items. `DialogService`
+    gained `input(...)`, shown as a JavaFX `TextInputDialog`.
+  - `MoveWorker` borrows a second session from its target pool while it holds the first one, which cannot work for a stateful pool
+    with one connection. For stateful protocols the browser therefore creates a separate pool for the move and shuts it down in
+    `cleanup`, as the macOS controller does (it never shuts it down). With the local filesystem this path is not exercised, so
+    step 2.12 renames a file on the SFTP container.
+  - Smoke `fileops` uses the real dialogs, checks the files on disk, and `smoke.sh` checks the folder is empty at the end.
 
 - [ ] **2.11 Disconnect, window close, multiple windows**
 

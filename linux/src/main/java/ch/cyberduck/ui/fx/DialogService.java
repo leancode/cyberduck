@@ -48,6 +48,16 @@ public interface DialogService {
     Confirmation confirm(String title, String message, String defaultButton, String cancelButton, boolean suppressible);
 
     /**
+     * Ask for a line of text, for example the name of a new folder
+     *
+     * @param title   Short summary
+     * @param message What is asked for
+     * @param initial Suggested text
+     * @return Text typed by the user or null if cancelled
+     */
+    String input(String title, String message, String initial);
+
+    /**
      * Ask what to do when a file of a transfer already exists
      *
      * @param title   Short summary
