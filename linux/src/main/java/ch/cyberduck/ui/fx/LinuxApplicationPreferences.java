@@ -151,6 +151,12 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
         this.setDefault("factory.editorfactory.class", DefaultEditorFactory.class.getName());
         this.setDefault("factory.proxy.class", EnvironmentVariableProxyFinder.class.getName());
         this.setDefault("factory.symlink.class", DefaultSymlinkFeature.class.getName());
+        this.setDefault("factory.logincallback.class", FxLoginCallback.class.getName());
+        this.setDefault("factory.passwordcallback.class", FxPasswordCallback.class.getName());
+        this.setDefault("factory.hostkeycallback.class", FxHostKeyCallback.class.getName());
+        this.setDefault("factory.certificatetrustcallback.class", FxCertificateTrustCallback.class.getName());
+        this.setDefault("factory.certificatestore.class", FxCertificateStore.class.getName());
+        this.setDefault("factory.alertcallback.class", FxAlertCallback.class.getName());
         // Replaced by the Secret Service implementation later
         this.setDefault("factory.passwordstore.class", UnsecureHostPasswordStore.class.getName());
     }

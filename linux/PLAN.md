@@ -405,7 +405,7 @@ of a hang on failure.
     event loop`, exit 134, `hs_err_pid*.log`). `CyberduckApplication.quit()` hides every window and dialog first and is used by
     `--exit-after`. Step 2.11 must use `quit()` for the Quit command too. Delete any `hs_err_pid*.log` from the repository root.
 
-- [ ] **2.4 Prompts: login, password, host key, certificate trust, error alerts**
+- [x] **2.4 Prompts: login, password, host key, certificate trust, error alerts**
 
   **Do**
   - Introduce `DialogService` (interface) with methods that return plain values:
@@ -437,6 +437,28 @@ of a hang on failure.
   errors reach the alert path and nothing hangs). Append to `linux/smoke.sh`.
 
   **Commit**: `Add login, host key, certificate and error prompts.`
+
+  **Done (executor notes)**
+  - `DialogService` has three methods (`credentials`, `confirm` returning `Confirmation(accepted, suppressed)`, `error`), which is all
+    the callbacks need. `FxDialogService` marshals every dialog to the JavaFX thread through `FxController.invoke(..., true)` and
+    shows it above the focused window.
+  - The core creates callbacks by reflection with a constructor that takes the controller, so each `Fx*Callback` has a public
+    `(FxController)` constructor and a package-private one taking a `DialogService` for tests.
+  - Added `FxCertificateStore` (registered under `factory.certificatestore.class`) next to `FxCertificateTrustCallback`. The core
+    only asks the store about certificates the Java runtime does not trust, and the default store would accept any valid
+    certificate with a matching name. The new store always asks the user. Declining makes the connection fail.
+  - A declined SSH host key makes `OpenSSHHostKeyVerifier.verify` return `false` (it catches the cancel exception), so tests assert
+    `false`, not an exception.
+  - Tests: fake `DialogService` for the callbacks (headless), `TestCertificates` generates real self-signed certificates with
+    Bouncy Castle, and `FxDialogServiceTest` opens the real dialogs under a display, fills them in and presses the buttons.
+    42 tests in total, 9 skipped without a display.
+  - Smoke `connect-fail` connects to `sftp://127.0.0.1:1/`, waits for the real error dialog
+    (`Connection failed | Connection refused. ...`), closes it and checks the browser ended disconnected.
+  - Side effect: a failed listing now shows the error dialog, so the `navigate` smoke acknowledges it before checking that the
+    location is restored. Every later smoke that triggers a failure must do the same.
+  - Observed: `SLF4J: No SLF4J providers were found` on startup, because the classpath has an SLF4J 1.x binding next to
+    slf4j-api 2. Messages from libraries that log through SLF4J (such as sshj) are dropped. The CLI has the same dependency set.
+    Fix later by adding `org.apache.logging.log4j:log4j-slf4j2-impl` if library logs are needed.
 
 - [ ] **2.5 End-to-end SFTP test against a container**
 

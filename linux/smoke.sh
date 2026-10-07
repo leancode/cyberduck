@@ -32,4 +32,6 @@ smoke '^SMOKE OK navigate$' navigate "$work/nav"
 
 smoke '^SMOKE OK connect 3$' connect "$work/list"
 
+smoke '^SMOKE OK connect-fail ' connect-fail
+
 echo "SMOKE SCRIPT OK"
