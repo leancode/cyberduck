@@ -32,7 +32,7 @@
         <delete dir="${build.input}"/>
         <delete dir="${build.deploy}/${app.name}"/>
         <delete>
-            <fileset dir="${build.deploy}" includes="*.deb,*.rpm"/>
+            <fileset dir="${build.deploy}" includes="*.deb,*.rpm" erroronmissingdir="false"/>
         </delete>
         <mkdir dir="${build.input}"/>
         <mkdir dir="${build.resources}"/>
