@@ -681,7 +681,7 @@ of a hang on failure.
     folders, close one with a real `WINDOW_CLOSE_REQUEST` event, then Quit from the menu. The scenario does not call
     `System.exit`, and `smoke.sh` runs it under `timeout 30`, so a hang fails. It also checks that preferences were saved.
 
-- [ ] **2.12 Manual acceptance of the usable minimum**
+- [x] **2.12 Manual acceptance of the usable minimum**
 
   **Do**
   - Run the app on a desktop (or under `xvfb-run` with a VNC viewer if needed) and perform the
@@ -696,6 +696,36 @@ of a hang on failure.
   ```
 
   **Commit**: `Record usable minimum acceptance for Linux GUI.` (plan file ticks only)
+
+  **Done (executor notes)**
+  - **This acceptance was automated, not done by a person.** On 2026-10-07 an agent ran the checklist against a real SFTP server
+    (`atmoz/sftp:alpine`, OpenSSH 10.3, user `foo`, in Docker) and a local HTTPS server with a self-signed certificate, by
+    driving the real windows and dialogs with `smoke.sh`. A human walk-through on a real desktop is still recommended. The
+    automated run cannot cover the native file chooser, window decorations, themes, Wayland or HiDPI.
+  - Each item of the definition of the usable minimum and the scenario that covers it:
+
+    | Item | Scenario |
+    |---|---|
+    | Start the app | every scenario starts the real application |
+    | Pick a protocol, enter host and credentials | `connect`, `bookmarks`, `sftp` (bookmark dialog with protocol, server, port, user) |
+    | Accept an SSH host key | `sftp` (real dialog, answered once, not asked again on the second connect) |
+    | Accept a TLS certificate | `tls` (shows subject and fingerprint, Continue proceeds, Cancel ends quietly) |
+    | See a remote listing and navigate | `list`, `navigate`, `sftp` |
+    | Download and upload with overwrite prompts | `download`, `upload` (local filesystem, real dialog), `sftp` (SFTP transfers) |
+    | Create and delete folders, rename | `fileops`, `sftp` (rename on a second connection) |
+    | See transfer progress | `download` (live progress, stop, resume, remove) |
+    | Save and reopen a bookmark | `bookmarks`, `sftp` (disconnect, then open the bookmark again), `BookmarkPersistenceTest` |
+    | Error dialog instead of a hang | `connect-fail`, `navigate` (missing folder), `tls` (server that is not WebDAV) |
+
+  - Findings from the SFTP run: the host key is asked once, the password once. Upload, download and rename each use their own
+    connection (the server log shows several logins), and none of them asks for the password again, so the credentials are kept in
+    memory on the bookmark. The remote folder is empty at the end.
+  - `smoke.sh` now also needs `python3` and `openssl` (for `tls-server.py` and the certificate), and starts the SFTP container only
+    when `docker info` works. Without Docker it prints `skip sftp`. Proxy variables are unset for the TLS scenario because the
+    core's `EnvironmentVariableProxyFinder` ignores `no_proxy`, so `localhost` went through the proxy of the sandbox. This was
+    reported as a separate follow-up and no core code was changed.
+  - Environment facts that matter for the next steps: JDK 25 comes from `apt-get install openjdk-25-jdk` on Ubuntu 24.04 and
+    `xvfb`, `x11-utils` and `imagemagick` help with screenshots. Total time of `xvfb-run -a linux/smoke.sh` is about one minute.
 
 **Gate**: all boxes in Phase 1 and Phase 2 ticked. Only then continue.
 

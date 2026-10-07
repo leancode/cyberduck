@@ -109,6 +109,16 @@ public final class Smoke {
                     System.out.printf("SMOKE OK download progress=%d%n", download(browser, arguments.get(1), arguments.get(2)));
                     hold();
                     return 0;
+                case "tls":
+                    tls(browser, arguments.get(1));
+                    System.out.println("SMOKE OK tls");
+                    hold();
+                    return 0;
+                case "sftp":
+                    sftp(browser, arguments.get(1), arguments.get(2), arguments.get(3), arguments.get(4), arguments.get(5));
+                    System.out.println("SMOKE OK sftp");
+                    hold();
+                    return 0;
                 case "windows":
                     windows(browser, arguments.get(1), arguments.get(2));
                     System.out.println("SMOKE OK windows");
@@ -310,6 +320,200 @@ public final class Smoke {
         });
         await("list emptied", () -> onFx(() -> transfers.getTable().getItems().isEmpty()));
         return events;
+    }
+
+    /**
+     * Connect over HTTPS to a server with a certificate that nobody trusts. The certificate is shown. Continuing lets the
+     * connection proceed, and the failure of the server that does not speak WebDAV reaches the user as an error dialog.
+     * Cancelling stops the connection without further messages.
+     */
+    static void tls(final BrowserController browser, final String port) throws Exception {
+        for(boolean trust : new boolean[]{true, false}) {
+            final Host host = HostBuilder.fromUrl(ProtocolFactory.get(), String.format("davs://user:secret@localhost:%s/", port));
+            onFx(() -> {
+                browser.mount(host);
+                return null;
+            });
+            await("certificate dialog", () -> onFx(() -> null != dialog()));
+            final String header = onFx(() -> dialog().getHeaderText());
+            final String content = onFx(() -> dialog().getContentText());
+            System.out.printf("Certificate dialog: %s | %s%n", header, content);
+            check("names the server", header.contains("localhost"));
+            check("shows the subject", content.contains("CN=localhost"));
+            check("shows the fingerprint", content.contains("SHA-256 fingerprint: "));
+            onFx(() -> {
+                final DialogPane pane = dialog();
+                // Continue is the first button, Cancel the second
+                ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(trust ? 0 : 1))).fire();
+                return null;
+            });
+            if(trust) {
+                // The connection goes on and fails because the server does not speak WebDAV. The user is told.
+                await("error dialog", () -> onFx(() -> null != dialog()));
+                final String failure = onFx(() -> dialog().getHeaderText());
+                System.out.printf("After continuing: %s%n", failure);
+                check("failure is explained", StringUtils.isNotBlank(failure));
+                closeDialog();
+            }
+            else {
+                // Declining is the decision of the user, so there is nothing to report
+                await("disconnected after cancelling", () -> onFx(() -> !browser.isMounted()));
+                check("no error dialog after the user cancelled", null == onFx(Smoke::dialog));
+                System.out.println("After cancelling: disconnected without an error dialog");
+            }
+            await("disconnected", () -> onFx(() -> !browser.isMounted() && null == browser.getRendered()));
+        }
+    }
+
+    /**
+     * Wait for the condition while answering the dialogs a user would answer: allow the unknown host key and type the
+     * password. Any other dialog fails the scenario.
+     *
+     * @param counts Number of times each kind of dialog was answered
+     */
+    static void awaitAnswering(final String description, final String password, final java.util.Map<String, Integer> counts,
+                               final Callable<Boolean> condition) throws Exception {
+        final long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
+        while(!condition.call()) {
+            if(System.currentTimeMillis() > deadline) {
+                throw new IllegalStateException(String.format("Timeout waiting for %s", description));
+            }
+            final String kind = onFx(() -> {
+                final DialogPane pane = dialog();
+                if(null == pane) {
+                    return null;
+                }
+                final String header = StringUtils.defaultString(pane.getHeaderText());
+                if(pane.lookup(".password-field") != null) {
+                    ((javafx.scene.control.PasswordField) pane.lookup(".password-field")).setText(password);
+                    ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
+                    return "password";
+                }
+                if(header.contains("fingerprint")) {
+                    ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
+                    return "hostkey";
+                }
+                throw new IllegalStateException(String.format("Unexpected dialog while waiting for %s: %s | %s", description, header, pane.getContentText()));
+            });
+            if(kind != null) {
+                counts.merge(kind, 1, Integer::sum);
+            }
+            TimeUnit.MILLISECONDS.sleep(100);
+        }
+    }
+
+    /**
+     * The checklist of the usable minimum against a real SFTP server: add a bookmark, connect with host key and password
+     * prompts, browse, upload, download, rename, create and delete, disconnect and connect again.
+     *
+     * @param workdir Folder on this computer for the files to upload and download
+     */
+    static void sftp(final BrowserController browser, final String host, final String port, final String user, final String password, final String workdir) throws Exception {
+        final java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
+        final java.nio.file.Path work = java.nio.file.Paths.get(workdir);
+        final BookmarkController bookmarks = browser.getBookmarks();
+        final TransferController transfers = TransferController.get();
+
+        // Save a bookmark. It stores the username but not the password.
+        onFx(() -> {
+            Platform.runLater(bookmarks::add);
+            return null;
+        });
+        await("bookmark dialog", () -> onFx(() -> null != bookmarks.getDialog() && bookmarks.getDialog().isShowing()));
+        onFx(() -> {
+            final ConnectionDialog dialog = bookmarks.getDialog();
+            dialog.getNicknameField().setText("SFTP test");
+            dialog.getProtocolBox().setValue(ProtocolFactory.get().forName("sftp"));
+            dialog.getServerField().setText(host);
+            dialog.getPortField().setText(port);
+            dialog.getUsernameField().setText(user);
+            dialog.getConnectButton().fire();
+            return null;
+        });
+        await("bookmark saved", () -> onFx(() -> 1 == bookmarks.getList().getItems().size()));
+        final Host bookmark = onFx(() -> bookmarks.getList().getItems().get(0));
+
+        // Open it: the unknown host key is shown, then the password is asked
+        onFx(() -> {
+            bookmarks.getList().getSelectionModel().select(bookmark);
+            bookmarks.connect();
+            return null;
+        });
+        awaitAnswering("listing after connecting", password, counts, () -> onFx(() -> null != browser.getRendered()));
+        check("host key was shown", counts.getOrDefault("hostkey", 0) == 1);
+        check("password was asked", counts.getOrDefault("password", 0) == 1);
+        check("upload folder is listed", names(browser).contains("upload"));
+
+        // Navigate into the folder that can be written to
+        doubleClick(browser, "upload");
+        awaitAnswering("upload folder", password, counts, () -> onFx(() -> null != browser.getRendered() && browser.getRendered().getAbsolute().endsWith("/upload")));
+
+        // Upload
+        final java.nio.file.Path up = work.resolve("up.bin");
+        java.nio.file.Files.write(up, new byte[512 * 1024]);
+        final int completed = transfers.getCompleted();
+        onFx(() -> {
+            browser.upload(List.of(up.toFile()));
+            return null;
+        });
+        awaitAnswering("upload", password, counts, () -> transfers.getCompleted() >= completed + 1);
+        awaitAnswering("uploaded file shown", password, counts, () -> names(browser).contains("up.bin"));
+
+        // Download it again to a different folder
+        final java.nio.file.Path down = java.nio.file.Files.createDirectories(work.resolve("down"));
+        PreferencesFactory.get().setProperty("queue.download.folder", down.toString());
+        select(browser, "up.bin");
+        onFx(() -> {
+            browser.getDownloadButton().fire();
+            return null;
+        });
+        awaitAnswering("download", password, counts, () -> transfers.getCompleted() >= completed + 2);
+        check("downloaded file is the same", -1 == java.nio.file.Files.mismatch(up, down.resolve("up.bin")));
+
+        // Rename, create a folder, delete both. Rename needs a second connection on a stateful protocol.
+        select(browser, "up.bin");
+        onFx(() -> {
+            Platform.runLater(browser::rename);
+            return null;
+        });
+        answerInput("renamed.bin");
+        awaitAnswering("renamed file shown", password, counts, () -> names(browser).contains("renamed.bin") && !names(browser).contains("up.bin"));
+        onFx(() -> {
+            Platform.runLater(browser::newFolder);
+            return null;
+        });
+        answerInput("folder");
+        awaitAnswering("folder shown", password, counts, () -> names(browser).contains("folder"));
+        for(String name : List.of("folder", "renamed.bin")) {
+            select(browser, name);
+            onFx(() -> {
+                Platform.runLater(browser::delete);
+                return null;
+            });
+            await("confirmation", () -> onFx(() -> null != dialog()));
+            onFx(() -> {
+                final DialogPane pane = dialog();
+                ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
+                return null;
+            });
+            awaitAnswering(String.format("%s removed", name), password, counts, () -> !names(browser).contains(name));
+        }
+        check("folder is empty again", names(browser).isEmpty());
+        System.out.printf("Dialogs answered: %s%n", counts);
+
+        // Disconnect and open the bookmark again. The host key is known now, the password is asked again.
+        menu(browser, "Disconnect");
+        await("disconnected", () -> onFx(() -> !browser.isMounted()));
+        final int hostkeys = counts.getOrDefault("hostkey", 0);
+        onFx(() -> {
+            bookmarks.getList().getSelectionModel().select(bookmark);
+            bookmarks.connect();
+            return null;
+        });
+        awaitAnswering("listing after connecting again", password, counts, () -> onFx(() -> null != browser.getRendered()));
+        check("known host key is not asked again", hostkeys == counts.getOrDefault("hostkey", 0));
+        menu(browser, "Disconnect");
+        await("disconnected again", () -> onFx(() -> !browser.isMounted()));
     }
 
     private static void menu(final BrowserController browser, final String name) throws Exception {
