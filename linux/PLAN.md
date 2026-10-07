@@ -460,7 +460,7 @@ of a hang on failure.
     slf4j-api 2. Messages from libraries that log through SLF4J (such as sshj) are dropped. The CLI has the same dependency set.
     Fix later by adding `org.apache.logging.log4j:log4j-slf4j2-impl` if library logs are needed.
 
-- [ ] **2.5 End-to-end SFTP test against a container**
+- [x] **2.5 End-to-end SFTP test against a container**
 
   **Do**
   - Add `org.testcontainers:testcontainers` (test scope, version as in `smb/pom.xml`) to the
@@ -479,6 +479,18 @@ of a hang on failure.
   (the category is excluded by `-P no-testcontainers`; document this in the test's Javadoc).
 
   **Commit**: `Add SFTP end-to-end test for Linux browser.`
+
+  **Done (executor notes)**
+  - The test logs in through the real `FxLoginCallback` and `FxHostKeyCallback` with a fake `DialogService`: the host has the
+    username but no password, so the core must ask. It asserts that the home folder listing contains `upload`, that the password
+    was asked once and that the unknown host key was shown. Checked with a wrong password: the mount returns no home and the
+    test fails.
+  - By default only the `IntegrationTest` category is excluded, so a `TestcontainerTest` runs in a plain `mvn test`. The test
+    therefore starts with `Assume.assumeTrue(DockerClientFactory.instance().isDockerAvailable())`. Verified: with the Docker
+    daemon stopped the result is `Skipped: 1` and the build is green.
+  - Running it in this sandbox needed a Docker daemon (`dockerd &`), `TESTCONTAINERS_RYUK_DISABLED=true` (the Ryuk image pull is
+    rate limited) and `docker pull mirror.gcr.io/atmoz/sftp:alpine && docker tag mirror.gcr.io/atmoz/sftp:alpine atmoz/sftp:alpine`
+    because Docker Hub answered `429 Too Many Requests`. GitHub-hosted runners do not need any of this.
 
 - [ ] **2.6 Bookmarks**
 

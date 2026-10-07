@@ -30,12 +30,14 @@ public class FakeDialogService implements DialogService {
     public Credentials credentials;
     public Confirmation confirmation = Confirmation.YES;
 
+    public int credentialRequests;
     public final List<String> titles = new ArrayList<>();
     public final List<String> messages = new ArrayList<>();
     public final List<String> errors = new ArrayList<>();
 
     @Override
     public Credentials credentials(final Host bookmark, final String username, final String title, final String reason, final LoginOptions options) {
+        credentialRequests++;
         titles.add(title);
         return credentials;
     }
