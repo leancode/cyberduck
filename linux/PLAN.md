@@ -1,0 +1,847 @@
+# Linux GUI for Cyberduck: step-by-step execution plan
+
+This plan adds a JavaFX desktop frontend for Linux as a new Maven module `linux`, gets it to a
+usable minimum, turns on GitHub Actions for it, and then produces `.deb` and `.rpm` packages.
+
+It is written to be executed by a coding agent one step at a time. Every step has three parts:
+
+- **Do**: what to change, naming the files and the existing code to copy from.
+- **Proof**: a command (or commands) whose output proves the step works. Run it. Do not tick the
+  box or move on until it passes exactly as described.
+- **Commit**: the commit message to use for that step.
+
+Tick a box (`- [x]`) only after the proof passed and the commit is made. Phases are ordered; do not
+start a phase before every box in the previous phase is ticked. Phase 3 (GitHub Actions) and Phase 4
+(packages) are explicitly gated on the usable-minimum checklist at the end of Phase 2.
+
+---
+
+## 0. Rules for the executor
+
+Read these before every session.
+
+1. **One step per session of work.** Finish the step, run its proof, commit, tick the box in this
+   file (include the tick in the same commit or the next one). Then stop or continue to the next step.
+2. **Never skip a proof.** If the proof fails, fix the step until it passes. If the step as written
+   turns out to be wrong (a class name is different, a plugin option does not exist), do the smallest
+   change that reaches the same goal, and record what changed in a short note under the step.
+3. **Build environment.** JDK 25 (Temurin), Maven 3.5+, Linux. Run once at the start of work, from the
+   repository root, to fill the local Maven repository with every module:
+   ```bash
+   mvn --batch-mode --no-transfer-progress install -DskipTests -DskipSign -Drevision=0
+   ```
+   After that, build only the new module with `-pl linux` (no `-am`) unless the step says otherwise.
+   The `osx` and `windows` modules self-skip on Linux, so this works on a Linux host.
+4. **Running the app from the build tree.** Whenever a proof says `RUN_FX`, it means this:
+   ```bash
+   mvn -q -pl linux dependency:build-classpath -Dmdep.outputFile=target/classpath.txt
+   java -cp "linux/target/classes:$(cat linux/target/classpath.txt)" ch.cyberduck.ui.fx.MainApplication "$@"
+   ```
+   Keep that as the script `linux/run.sh` (created in step 1.2) so proofs can call `linux/run.sh ...`.
+5. **Display.** Anything that opens a JavaFX window needs a display. Use `xvfb-run -a <command>`
+   on a headless machine (`sudo apt-get install -y xvfb`). Unit tests that need the toolkit must
+   call `Assume.assumeTrue(System.getenv("DISPLAY") != null)` so `mvn test` still passes headless.
+6. **Conventions** (from `AGENTS.md`): GPLv3 header copied from a neighbouring file, 4-space indent,
+   `if(`/`for(` with no space before the paren, Log4j 2 via `LogManager.getLogger`, JUnit 4 tests
+   named `*Test.java`. Commit messages: one short imperative capitalized sentence ending with a
+   period. No `Co-Authored-By` trailers naming an AI.
+7. **Branch.** Work on the branch the operator gives you. Push with `git push -u origin <branch>`.
+8. **Scope.** Do not touch `osx`, `windows`, or `cli` sources. Changes to `core` are allowed only
+   when a step says so.
+
+### Reference material (copy from these, do not reinvent)
+
+| Need | Look at |
+|---|---|
+| Linux platform defaults and factory wiring | `cli/src/main/java/ch/cyberduck/cli/LinuxTerminalPreferences.java`, `TerminalPreferences.java` |
+| Application bootstrap order (preferences, protocols, profiles) | `cli/src/main/java/ch/cyberduck/cli/Terminal.java` (`main`, constructor, `open`) |
+| How a Maven module packages for Linux with jpackage | `cli/linux/pom.xml`, `cli/linux/build.xml`, `setup/deb/duck.*`, `setup/rpm/duck.spec` |
+| Browser window logic (listing, navigation, file operations) | `osx/src/main/java/ch/cyberduck/ui/cocoa/controller/BrowserController.java` |
+| Connection and login prompts | `osx/.../controller/ConnectionController.java`, `LoginController.java`, `osx/.../callback/Prompt*Callback.java` |
+| Transfer window and starting transfers | `osx/.../controller/TransferController.java`, `TransferPromptController.java` |
+| Bookmark editing | `osx/.../controller/BookmarkController.java` |
+| Shared, toolkit-free UI helpers | `core/src/main/java/ch/cyberduck/ui/browser/*`, `core/src/main/java/ch/cyberduck/ui/comparator/*` |
+| Controller contract | `core/src/main/java/ch/cyberduck/core/Controller.java`, `AbstractController.java` |
+| Callback interfaces to implement | `core/.../LoginCallback.java`, `PasswordCallback.java`, `HostKeyCallback.java`, `CertificateTrustCallback.java`, `threading/AlertCallback.java`, `transfer/TransferPrompt.java`, `transfer/TransferErrorCallback.java` |
+| Factory keys the callbacks register under | `core/src/main/java/ch/cyberduck/core/preferences/Preferences.java` (search `factory.`) |
+| Local-filesystem protocol used for headless proofs | `nio/src/main/java/ch/cyberduck/core/nio/LocalProtocol.java`, `nio/src/test/.../LocalListServiceTest.java` |
+| Testcontainers pattern for an end-to-end server test | `smb/src/test/java/ch/cyberduck/core/smb/AbstractSMBTest.java`, `smb/pom.xml` |
+| Existing CI | `.github/workflows/build.yml`, `deploy.yml`, `release.yml` |
+
+### Fixed design decisions
+
+- **Toolkit: JavaFX**, UI built in Java code (no FXML). Version: the newest `org.openjfx` 25.x on
+  Maven Central (check `https://repo1.maven.org/maven2/org/openjfx/javafx-controls/maven-metadata.xml`).
+- **Module**: directory `linux/`, artifactId `linux`, Java package `ch.cyberduck.ui.fx`.
+  The module compiles with `--release 25` because JavaFX 25 class files need a modern JDK; the rest
+  of the reactor stays at Java 8 bytecode.
+- **Launcher**: `ch.cyberduck.ui.fx.MainApplication` is a plain class with `main` that calls
+  `Application.launch(CyberduckApplication.class, args)`. It must not extend `Application`, so
+  JavaFX can run from the classpath without the module path.
+- **Preferences**: `LinuxApplicationPreferences` extends `DefaultPreferences`, persisted as a
+  properties file in the support directory. Support directory is `~/.duck` via
+  `UserHomeSupportDirectoryFinder`, the same as the CLI, so bookmarks and profiles are shared.
+- **Threading**: `FxController extends AbstractController`; `invoke(MainAction)` uses
+  `Platform.runLater`, and `invoke(action, true)` blocks on a `CountDownLatch` unless already on
+  the FX thread.
+- **Headless proofs**: a `--smoke <mode> ...` command line runs a scripted scenario against the
+  local filesystem (`LocalProtocol`) and exits 0 on success, 1 on failure, always within 120 s.
+  All smoke modes are collected in `linux/smoke.sh`, which CI runs under `xvfb-run`.
+
+---
+
+## Phase 1: Module skeleton
+
+- [ ] **1.1 Create the `linux` Maven module and register it in the reactor**
+
+  **Do**
+  - Create `linux/pom.xml` with parent `ch.cyberduck:parent` (relativePath `../pom.xml`, same
+    version as `cli/linux/pom.xml`), artifactId `linux`, packaging `jar`, description
+    `Cyberduck Linux`.
+  - In `<properties>` set `maven.compiler.source`, `maven.compiler.target` to `25`,
+    `javafx.version` to the chosen 25.x, and `maven.main.skip`/`maven.test.skip` to `true`.
+  - Add a profile `linux` activated by `<os><family>Linux</family></os>` that sets
+    `maven.main.skip` and `maven.test.skip` to `false` and declares the dependencies:
+    `ch.cyberduck:core`, `ch.cyberduck:protocols`, `ch.cyberduck:cryptomator`,
+    `org.openjfx:javafx-controls:${javafx.version}`, and for tests `ch.cyberduck:test`
+    (type `test-jar`, scope `test`, copy the block from `cli/pom.xml`) plus JUnit as in `cli/pom.xml`.
+    Copy the `arm64`/`arm32`/`x86_64` profiles from `cli/linux/pom.xml` that add the
+    `net.java.dev.jna:libjnidispatch` `.so` dependency (drop the jansi entries).
+  - The parent's `enforce-bytecode-version` rule caps dependencies at Java 8 bytecode and will
+    reject JavaFX. In the module, declare `maven-enforcer-plugin` with an execution whose id is
+    `enforce-bytecode-version` and add `<excludes><exclude>org.openjfx:*</exclude></excludes>`
+    inside `<enforceBytecodeVersion>`.
+  - Add `<module>linux</module>` to the root `pom.xml` after `<module>cli/osx</module>`.
+  - Create `linux/src/main/java/ch/cyberduck/ui/fx/` with one placeholder class `Version.java`
+    that returns `PreferencesFactory.get().getProperty("application.version")` so the module has
+    something to compile.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 install
+  ls linux/target/linux-*.jar
+  mvn -q -pl linux dependency:tree | grep -E "javafx-(controls|graphics|base).*linux"
+  ```
+  The build succeeds including the enforcer, the jar exists, and the tree shows the JavaFX jars
+  with the `linux` classifier.
+
+  **Commit**: `Add linux module skeleton.`
+
+- [ ] **1.2 Launcher, empty window, and `run.sh`**
+
+  **Do**
+  - `MainApplication.java`: plain `main`. Handles `--version` (print `Version` and return without
+    starting JavaFX) and `--exit-after <seconds>` (used by proofs). Otherwise calls
+    `Application.launch(CyberduckApplication.class, args)`.
+  - `CyberduckApplication.java` extends `javafx.application.Application`; `start(Stage)` shows a
+    `Stage` titled `Cyberduck` with an empty `BorderPane`, 900x600. If `--exit-after N` was given,
+    schedule `Platform.exit()` after N seconds.
+  - `linux/run.sh` as in rule 4 (make it executable). It must `cd` to the repository root.
+
+  **Proof**
+  ```bash
+  mvn -q -pl linux -DskipSign -Drevision=0 compile
+  linux/run.sh --version                       # prints a version string, exit 0, no window
+  xvfb-run -a linux/run.sh --exit-after 3; echo "exit=$?"   # exit=0 after about 3 s
+  ```
+
+  **Commit**: `Add JavaFX launcher and empty main window.`
+
+- [ ] **1.3 Persistent Linux preferences**
+
+  **Do**
+  - `LinuxApplicationPreferences extends DefaultPreferences`. Constructor takes a `Local` file
+    (default: `UserHomeSupportDirectoryFinder` result + `cyberduck.properties`). Implement
+    `load()` (read `java.util.Properties` from the file if it exists), `save()` (write it),
+    `setProperty`, `deleteProperty`, `getProperty` (fall back to `getDefault`), and the two
+    locale methods as in `MemoryPreferences`.
+  - `setDefaults()` and `setFactories()`: copy every `setDefault` from
+    `LinuxTerminalPreferences` except the terminal-only ones (`library.jansi.path`, the
+    `factory.*callback.class` entries that point at `Terminal*` classes, `factory.notification.class`,
+    `factory.certificatestore.class`, `factory.transferpromptcallback.*`). Keep
+    `jna.boot.library.path`, `local.user.home`, `bookmarks.folder.name`, `profiles.folder.name`,
+    `connection.ssl.securerandom.algorithm`, and the factories for support directory, resources
+    finder, locale, browser launcher, application launcher, editor, proxy, symlink, password store
+    (`UnsecureHostPasswordStore` for now; Phase 5 replaces it).
+  - Add `application.name` = `Cyberduck`, `application.version` from the Maven version, and
+    `application.identifier` = `io.cyberduck`.
+  - `LinuxApplicationResourcesFinder`: same as `cli/.../ClasspathResourcesFinder` (copy it; it
+    returns the parent directory of the jar or classes directory, which is where `profiles/` is
+    unpacked in step 1.4 and where jpackage places resources in Phase 4).
+  - Unit test `LinuxApplicationPreferencesTest`: construct with a temp file, set a property, `save()`,
+    construct a second instance on the same file, `load()`, assert the value is read back and that
+    `deleteProperty` followed by `save()` removes it.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 test -Dtest=LinuxApplicationPreferencesTest
+  ```
+  `Tests run: >=2, Failures: 0, Errors: 0`.
+
+  **Commit**: `Add persistent preferences for Linux.`
+
+- [ ] **1.4 Bootstrap: preferences, protocols, profiles, bookmarks**
+
+  **Do**
+  - In `MainApplication.main`, before anything else: `PreferencesFactory.set(new LinuxApplicationPreferences())`.
+  - Register protocols the way `Terminal`'s constructor does:
+    `for(Protocol p : AutoServiceLoaderFactory.<Protocol>get().load(Protocol.class)) ProtocolFactory.get().register(p);`
+    then call `ProtocolFactory.get().load()` (as `Terminal.open` does) so the bundled profiles in
+    `<resources>/profiles` and the user's profiles in `~/.duck/profiles` are read.
+  - In `linux/pom.xml`, add the `maven-dependency-plugin` `unpack-profiles` execution copied from
+    `cli/linux/pom.xml` (unpacks `ch.cyberduck:profiles` into `${project.build.directory}/profiles`).
+    Declaring the plugin also inherits the parent's `copy-dependencies-jar-target` and
+    `copy-dependencies-so-target` executions, which Phase 4 relies on.
+  - Load `BookmarkCollection.defaultCollection().load()` after protocols are registered.
+  - Add `--list-protocols`: prints one line per `ProtocolFactory.get().find()` entry
+    (`identifier` and `description`) and exits 0 without JavaFX.
+
+  **Proof**
+  ```bash
+  mvn -q -pl linux -DskipSign -Drevision=0 compile
+  linux/run.sh --list-protocols | tee /tmp/protocols.txt | wc -l      # more than 20 lines
+  grep -E "^(sftp|ftp|s3|file|dav)" /tmp/protocols.txt                 # at least sftp, ftp, s3 present
+  ls linux/target/profiles/*.cyberduckprofile | wc -l                   # more than 50
+  ```
+
+  **Commit**: `Bootstrap preferences, protocols and bookmarks for Linux.`
+
+- [ ] **1.5 `FxController` and the JavaFX test harness**
+
+  **Do**
+  - `FxController extends AbstractController`: `invoke(MainAction)` -> `Platform.runLater`;
+    `invoke(MainAction, boolean wait)` runs inline when `Platform.isFxApplicationThread()`,
+    otherwise `runLater` and, if `wait`, blocks on a latch. `message(String)` and
+    `log(Type, String)` store the last values in observable `StringProperty` fields so views can bind.
+  - Test support class `FxToolkit` (in `src/test`): static `init()` that calls
+    `Platform.startup(() -> {})` once, sets `Platform.setImplicitExit(false)`, and is guarded by
+    `Assume.assumeTrue(System.getenv("DISPLAY") != null)`.
+  - `FxControllerTest`: with `FxToolkit.init()`, call `invoke(action, true)` from a worker thread
+    and assert it ran on the FX thread; without a display the test is skipped, not failed.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 test                 # headless: FxControllerTest skipped, build green
+  xvfb-run -a mvn --batch-mode -pl linux -DskipSign -Drevision=0 test     # with display: FxControllerTest runs and passes
+  ```
+  The second run's surefire output shows `FxControllerTest` with `Tests run: 1, Failures: 0, Skipped: 0`.
+
+  **Commit**: `Add JavaFX controller with main thread dispatch.`
+
+- [ ] **1.6 Headless smoke: list a local directory through the core**
+
+  **Do**
+  - `Smoke.java`: `--smoke list <directory>`. Builds
+    `new Host(new LocalProtocol(), new LocalProtocol().getDefaultHostname())`, a `SessionPool` via
+    `SessionPoolFactory.create(controller, host)`, and runs
+    `new WorkerBackgroundAction<>(controller, pool, new ListWorker(cache, directoryPath, listener))`
+    through `controller.background(...)`, then `get()`s the `Future`. Print
+    `SMOKE OK list <count>` and exit 0; on any exception print `SMOKE FAIL` with the message and exit 1.
+    Wrap in a 120 s timeout.
+  - `linux/smoke.sh`: runs `linux/run.sh --smoke list $(mktemp -d with three files)` and checks the
+    output contains `SMOKE OK list 3`. Exit non-zero on any failure. Later steps append modes here.
+
+  **Proof**
+  ```bash
+  mvn -q -pl linux -DskipSign -Drevision=0 compile && linux/smoke.sh; echo "exit=$?"   # SMOKE OK list 3, exit=0
+  ```
+
+  **Commit**: `Add headless smoke test listing a local directory.`
+
+---
+
+## Phase 2: Usable minimum
+
+Definition of usable minimum (the gate for Phase 3): a Linux user can start the app, pick a
+protocol, enter host and credentials, accept an SSH host key or TLS certificate, see a remote
+directory listing, navigate, download and upload files with overwrite prompts, create and delete
+folders, rename, see transfer progress, save and reopen a bookmark, and get an error dialog instead
+of a hang on failure.
+
+- [ ] **2.1 Browser window with a file table**
+
+  **Do**
+  - `BrowserController extends FxController` owns a `Stage`. Layout: toolbar (Connect, Refresh, Up,
+    Download, Upload, New Folder, Delete, Rename), a path `TextField`, a `TableView<Path>` with
+    columns Filename, Size, Modified, Permissions, Owner. Use `BrowserColumn` from
+    `core/.../ui/browser` for column identity and the comparators in `core/.../ui/comparator` for
+    sorting. Format sizes with `SizeFormatterFactory` and dates with `UserDateFormatterFactory`
+    (find both in `core`).
+  - Status bar label bound to the controller's message property.
+  - Listing: `mount(Host)` creates the `SessionPool` and runs `HomeFinderWorker` then `ListWorker`
+    exactly as `osx` `BrowserController.reload` does (search for `new ListWorker` there). Keep a
+    `PathCache`. Populate the table in `cleanup(AttributedList<Path>)` through `invoke`.
+  - Change `--smoke list` to open the browser window on the directory, wait for the table to be
+    filled (poll `table.getItems().size()` on the FX thread), print `SMOKE OK list <rows>`, exit.
+
+  **Proof**
+  ```bash
+  mvn -q -pl linux -DskipSign -Drevision=0 compile && xvfb-run -a linux/smoke.sh; echo "exit=$?"
+  ```
+  `SMOKE OK list 3` and `exit=0`. Also run `xvfb-run -a linux/run.sh --exit-after 5` and confirm no
+  exception in the output.
+
+  **Commit**: `Add browser window with directory listing.`
+
+- [ ] **2.2 Navigation**
+
+  **Do**
+  - Double-click on a directory row lists it; the Up button lists the parent; typing a path in the
+    path field and pressing Enter lists it. Keep a history for a Back button if cheap.
+  - `--smoke navigate <dir>`: the harness creates `<dir>/a/b/file.txt`; the smoke opens `<dir>`,
+    programmatically double-clicks `a`, then `b`, waits for `file.txt` to appear, goes Up twice, and
+    prints `SMOKE OK navigate`.
+  - Append the mode to `linux/smoke.sh`.
+
+  **Proof**
+  ```bash
+  xvfb-run -a linux/smoke.sh; echo "exit=$?"    # both modes OK, exit=0
+  ```
+
+  **Commit**: `Add directory navigation in browser.`
+
+- [ ] **2.3 Connection dialog**
+
+  **Do**
+  - `ConnectionDialog`: protocol `ComboBox` filled from `ProtocolFactory.get().find()`, hostname,
+    port (defaults from `protocol.getDefaultPort()`), username, password, initial path. A
+    toolkit-free `HostBuilder` class turns the field values into a `Host` (also accepting a full URL
+    through `HostParser`). Connect runs `BrowserController.mount(host)`.
+  - Unit test `HostBuilderTest`: `sftp://user@example.net:2222/home` yields protocol `sftp`,
+    port 2222, username `user`, default path `/home`; and the field-based path yields the same.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 test -Dtest=HostBuilderTest     # green
+  xvfb-run -a linux/run.sh --exit-after 5                                             # still starts
+  ```
+
+  **Commit**: `Add connection dialog.`
+
+- [ ] **2.4 Prompts: login, password, host key, certificate trust, error alerts**
+
+  **Do**
+  - Introduce `DialogService` (interface) with methods that return plain values:
+    `Credentials login(Host, String username, String title, String reason, LoginOptions)`,
+    `String password(String title, String reason)`, `boolean confirm(String title, String message)`,
+    `void error(String title, String message)`. `FxDialogService` implements it with JavaFX
+    `Dialog`s, always through `controller.invoke(..., true)` so it may be called from background threads.
+  - Implement and register through `LinuxApplicationPreferences.setFactories()`:
+    - `FxLoginCallback implements LoginCallback` -> `factory.logincallback.class`
+    - `FxPasswordCallback implements PasswordCallback` -> `factory.passwordcallback.class`
+    - `FxHostKeyCallback extends OpenSSHHostKeyVerifier` (ssh module; mirror
+      `TerminalHostKeyVerifier`) -> `factory.hostkeycallback.class`
+    - `FxCertificateTrustCallback implements CertificateTrustCallback` -> `factory.certificatetrustcallback.class`
+    - `FxAlertCallback implements AlertCallback` (shows `BackgroundException.getMessage()` and
+      `getDetail()`, returns false) -> `factory.alertcallback.class`
+  - Each callback takes a `DialogService` in its constructor (default constructor uses the FX one)
+    so tests inject a fake.
+  - Tests with a fake `DialogService`: `FxLoginCallbackTest` returns the credentials the fake
+    produced and throws `LoginCanceledException` when the fake returns null;
+    `FxHostKeyCallbackTest` accepts when the fake confirms and throws when it does not.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 test      # all green
+  linux/run.sh --smoke connect-fail                             # see below
+  ```
+  Add `--smoke connect-fail`: mounts `sftp://127.0.0.1:1/` with the alert callback replaced by one
+  that records the failure; expect `SMOKE OK connect-fail` printed within 30 s and exit 0 (proves
+  errors reach the alert path and nothing hangs). Append to `linux/smoke.sh`.
+
+  **Commit**: `Add login, host key, certificate and error prompts.`
+
+- [ ] **2.5 End-to-end SFTP test against a container**
+
+  **Do**
+  - Add `org.testcontainers:testcontainers` (test scope, version as in `smb/pom.xml`) to the
+    `linux` profile dependencies.
+  - `SFTPBrowserIntegrationTest` annotated `@Category(TestcontainerTest.class)`: start
+    `atmoz/sftp:alpine` with command `foo:pass:::upload`, mount via `HostBuilder` with the mapped
+    port, run the same listing path as the browser (`HomeFinderWorker` + `ListWorker`) using a
+    fake `DialogService` that returns `foo`/`pass`, and assert the listing contains `upload`.
+    Follow `AbstractSMBTest` for container lifecycle.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 test -Dtest=SFTPBrowserIntegrationTest -Dsurefire.group.excluded=none
+  ```
+  Green with Docker available. Also confirm plain `mvn -pl linux test` still passes without Docker
+  (the category is excluded by `-P no-testcontainers`; document this in the test's Javadoc).
+
+  **Commit**: `Add SFTP end-to-end test for Linux browser.`
+
+- [ ] **2.6 Bookmarks**
+
+  **Do**
+  - `BookmarkController`: a `ListView<Host>` bound to `BookmarkCollection.defaultCollection()`
+    (listen with `CollectionListener`), buttons Add (opens `ConnectionDialog` prefilled), Edit,
+    Delete, and double-click to connect. Saving goes through the collection (`add`, `collectionItemChanged`).
+  - Show it as a left pane of the browser window with a toggle button.
+  - Unit test `BookmarkPersistenceTest`: create `new BookmarkCollection(tempDirectoryLocal)`
+    (the constructor that takes a `Local` folder), `load`, add a `Host` for `sftp` with a nickname,
+    then create a second `BookmarkCollection` on the same directory, `load`, and assert one host
+    with the same `getHostname()` and `getNickname()`. This proves plist writing works on Linux.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 test -Dtest=BookmarkPersistenceTest   # green
+  xvfb-run -a linux/run.sh --exit-after 5                                                  # starts with bookmark pane
+  ```
+
+  **Commit**: `Add bookmark list and editing.`
+
+- [ ] **2.7 Download with overwrite prompt**
+
+  **Do**
+  - Download button: for the selected rows create `new DownloadTransfer(host, roots)` and run it
+    through `TransferBackgroundAction` (see `osx` `TransferController.start` and the constructors in
+    `core/.../threading/TransferBackgroundAction.java`), adding it to `TransferCollection.defaultCollection()`.
+    Target directory: `DownloadDirectoryFinder` from `core/.../ui/browser`, defaulting to
+    `~/Downloads` (preference `queue.download.folder`).
+  - `FxTransferPrompt implements TransferPrompt` registered for every transfer type under
+    `factory.transferpromptcallback.<type>.class` (see how `TerminalPreferences` loops over
+    `Transfer.Type`). Minimum UI: a dialog listing the conflicting items with Overwrite / Resume /
+    Skip / Cancel mapped to `TransferAction`.
+  - `FxTransferErrorCallback implements TransferErrorCallback` -> `factory.transfererrorcallback.class`:
+    dialog with Continue / Cancel.
+  - `--smoke download <src> <dst>`: the harness creates `<src>/f.bin` (1 MiB random). The smoke
+    opens `<src>`, selects `f.bin`, triggers the download into `<dst>` with the prompt replaced by
+    one that returns `overwrite`, waits for the transfer to complete, and prints `SMOKE OK download`.
+    `linux/smoke.sh` then compares `sha256sum` of source and destination.
+
+  **Proof**
+  ```bash
+  xvfb-run -a linux/smoke.sh; echo "exit=$?"     # includes download, checksums equal, exit=0
+  ```
+
+  **Commit**: `Add download transfer with overwrite prompt.`
+
+- [ ] **2.8 Upload**
+
+  **Do**
+  - Upload button opens a `FileChooser` (multiple) and starts `new UploadTransfer(host, root, local)`
+    the same way. After completion, reload the current directory.
+  - `--smoke upload <src> <dst>`: upload `<src>/g.bin` into `<dst>` with a programmatic file
+    selection (bypass the chooser in smoke mode), wait, print `SMOKE OK upload`; the script checks
+    checksums.
+
+  **Proof**
+  ```bash
+  xvfb-run -a linux/smoke.sh; echo "exit=$?"
+  ```
+
+  **Commit**: `Add upload transfer.`
+
+- [ ] **2.9 Transfer window**
+
+  **Do**
+  - `TransferController`: a second `Stage` with a `TableView<Transfer>` bound to
+    `TransferCollection.defaultCollection()`, columns Name, Status, Progress (`ProgressBar` cell),
+    and buttons Stop, Resume, Remove, Open Folder (`xdg-open` via `ApplicationLauncherFactory`).
+    Progress updates come from `TransferListener`/`TransferProgress` as in the `osx` controller.
+  - Menu item or toolbar button on the browser to show it.
+  - Extend `--smoke download` to assert at least one progress event was observed and print it in
+    the OK line: `SMOKE OK download progress=<n>`.
+
+  **Proof**
+  ```bash
+  xvfb-run -a linux/smoke.sh; echo "exit=$?"      # OK line shows progress>=1
+  ```
+
+  **Commit**: `Add transfer window.`
+
+- [ ] **2.10 File operations: new folder, delete, rename**
+
+  **Do**
+  - New Folder: prompt for a name, run `CreateDirectoryWorker`. Delete: confirm, run `DeleteWorker`
+    with `DisabledProgressListener`. Rename: inline edit or prompt, run `MoveWorker`. Reload after each.
+  - `--smoke fileops <dir>`: create folder `n`, rename it to `m`, create file via upload path or
+    `TouchWorker`, delete it, delete `m`; verify on the filesystem in the script; print `SMOKE OK fileops`.
+
+  **Proof**
+  ```bash
+  xvfb-run -a linux/smoke.sh; echo "exit=$?"
+  ```
+
+  **Commit**: `Add folder creation, delete and rename.`
+
+- [ ] **2.11 Disconnect, window close, multiple windows**
+
+  **Do**
+  - Closing a browser window runs `DisconnectBackgroundAction` on its pool. File > New Browser
+    opens another `BrowserController`. Quit disconnects all and calls `Platform.exit()` after
+    `BookmarkCollection.defaultCollection().save()` and `PreferencesFactory.get().save()`.
+  - Extend `--smoke list` to close the window at the end and verify the JVM exits by itself
+    without `System.exit` (the script already checks exit codes; add a 20 s `timeout` around it).
+
+  **Proof**
+  ```bash
+  xvfb-run -a linux/smoke.sh; echo "exit=$?"
+  ```
+
+  **Commit**: `Disconnect on window close and support multiple browsers.`
+
+- [ ] **2.12 Manual acceptance of the usable minimum**
+
+  **Do**
+  - Run the app on a desktop (or under `xvfb-run` with a VNC viewer if needed) and perform the
+    definition-of-usable-minimum list against a real SFTP server (the Testcontainers image from
+    step 2.5 started by hand works: `docker run -p 2222:22 atmoz/sftp:alpine foo:pass:::upload`).
+  - Record the date and the server used in a note under this step.
+
+  **Proof**: every item of the definition is checked by a person. Then run the full module checks
+  one more time:
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 verify && xvfb-run -a linux/smoke.sh
+  ```
+
+  **Commit**: `Record usable minimum acceptance for Linux GUI.` (plan file ticks only)
+
+**Gate**: all boxes in Phase 1 and Phase 2 ticked. Only then continue.
+
+---
+
+## Phase 3: GitHub Actions for the Linux build
+
+Note on the existing CI: once step 1.1 adds `linux` to the reactor, the `ubuntu-latest` job in
+`build.yml` already compiles the module and runs its headless unit tests on every pull request. That
+is intended. Phase 3 adds a dedicated workflow that provides a display, runs the smoke suite, and
+later publishes packages.
+
+- [ ] **3.1 Add `.github/workflows/linux-gui.yml`**
+
+  **Do**
+  - Name `Linux GUI`. Triggers: `push` to `master` and to the working branch, `pull_request`.
+    Same `concurrency` block as `build.yml`.
+  - Job `build` on `ubuntu-latest`: `actions/checkout@v7` with `fetch-depth: 0` (the build number
+    comes from the git commit count), `actions/setup-java@v6` (temurin 25, `cache: maven`), then
+    `sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb rpm fakeroot desktop-file-utils`,
+    then:
+    ```bash
+    mvn --no-transfer-progress --batch-mode verify -DskipITs -DskipSign -Drevision=0 \
+        --also-make --projects i18n,profiles,linux
+    ```
+    with `SKIP_SIGN: true` in `env`, then `xvfb-run -a linux/smoke.sh`.
+  - Upload `linux/target/surefire-reports/**` as an artifact when `always()`.
+
+  **Proof**
+  - Lint locally: download the `actionlint` release binary into the scratch directory and run
+    `actionlint .github/workflows/linux-gui.yml` (no findings).
+  - Push the branch. Confirm the `Linux GUI` run is green (use `gh run watch` if `gh` is available,
+    otherwise ask the operator to confirm and note the run URL under this step).
+
+  **Commit**: `Add GitHub Actions workflow for Linux GUI.`
+
+- [ ] **3.2 Run the Testcontainers SFTP test in CI**
+
+  **Do**
+  - Add a step after the smoke tests:
+    `mvn --batch-mode -pl linux -DskipSign -Drevision=0 test -Dtest=SFTPBrowserIntegrationTest -Dsurefire.group.excluded=none`.
+    Docker is available on `ubuntu-latest`.
+
+  **Proof**: push; the step passes in the `Linux GUI` run.
+
+  **Commit**: `Run SFTP end-to-end test in Linux GUI workflow.`
+
+- [ ] **3.3 Publish the test report**
+
+  **Do**: add the `ScalableCapital/action-surefire-report@v2` step from `build.yml` with
+  `check_name: Test Report (linux-gui)` and the same `permissions` block as `build.yml`.
+
+  **Proof**: push; a check named `Test Report (linux-gui)` appears on the commit.
+
+  **Commit**: `Publish Linux GUI test report.`
+
+---
+
+## Phase 4: `.deb` and `.rpm` packages
+
+- [ ] **4.1 jpackage app-image**
+
+  **Do**
+  - Create `linux/build.xml` from `cli/linux/build.xml`. Changes: `app.name` = `Cyberduck`,
+    `--main-jar linux-${fullversion}.jar`, `--main-class ch.cyberduck.ui.fx.MainApplication`,
+    drop `-Djava.awt.headless=true`, keep the JNA and encoding options, add
+    `--icon ${home}/cyberduck-application.png`. For now only the `app-image` antcall.
+  - The input directory must contain: all jars and `.so` files from `linux/target` (the inherited
+    `copy-dependencies-*` executions put them there), `profiles/*.cyberduckprofile`, and the
+    `*.lproj` directories from the `i18n` artifact. Add an `unpack-i18n` execution to the module's
+    `maven-dependency-plugin` modelled on `osx/pom.xml` (search `<artifactId>i18n</artifactId>`),
+    output `${project.build.directory}`.
+  - In the `linux` profile of `linux/pom.xml`, add `maven-antrun-plugin` with no configuration
+    (this inherits the parent's `run-ant-target` execution that calls `build.xml` target `build` in
+    the `compile` phase, as `cli/linux` does).
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 package
+  ls linux/target/release/Cyberduck/bin/Cyberduck
+  linux/target/release/Cyberduck/bin/Cyberduck --version
+  ls linux/target/release/Cyberduck/lib/app/profiles | head -3
+  ls -d linux/target/release/Cyberduck/lib/app/*.lproj | wc -l       # more than 20
+  xvfb-run -a linux/target/release/Cyberduck/bin/Cyberduck --smoke list /tmp; echo "exit=$?"
+  ```
+
+  **Commit**: `Build Linux app image with jpackage.`
+
+- [ ] **4.2 Desktop integration**
+
+  **Do**
+  - Add `--linux-shortcut`, `--linux-menu-group "Network;FileTransfer;"`, `--linux-app-category net`,
+    `--linux-package-name cyberduck`, `--linux-deb-maintainer "<feedback@cyberduck.io>"`,
+    `--linux-rpm-license-type GPL`, `--license-file ${license}` (not for app-image, mirror the
+    `unless:true` trick in `cli/linux/build.xml`).
+  - Custom desktop entry: run jpackage once with `--verbose` and read the lines that say which
+    resource file names it would use from `--resource-dir` for the desktop file. Create that file
+    under `setup/linux/` (new directory) adding `MimeType=x-scheme-handler/sftp;x-scheme-handler/ftp;x-scheme-handler/ftps;x-scheme-handler/s3;`
+    and `Categories=Network;FileTransfer;`, and copy it into `${build.resources}` in `build.xml`.
+  - Handle a URL argument on the command line: `MainApplication` passes a single `scheme://` argument
+    to `HostParser` and opens a browser on it.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 package
+  desktop-file-validate linux/target/release/Cyberduck/lib/*.desktop
+  grep -E "MimeType=.*x-scheme-handler/sftp" linux/target/release/Cyberduck/lib/*.desktop
+  ```
+
+  **Commit**: `Add desktop entry and URL scheme handlers.`
+
+- [ ] **4.3 `.deb` package**
+
+  **Do**
+  - Add the `deb` antcall. Create `setup/deb/cyberduck.control`, `cyberduck.postinstall`,
+    `cyberduck.prerm`, `cyberduck.postrm` from the `duck.*` files; the post-install symlink becomes
+    `/opt/cyberduck/bin/Cyberduck` -> `/usr/local/bin/cyberduck`. Copy them into `${build.resources}`
+    as `control`, `postinst`, `prerm`, `postrm` like `cli/linux/build.xml` does.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 package
+  ls linux/target/release/cyberduck_*.deb
+  dpkg-deb -I linux/target/release/cyberduck_*.deb | grep -E "Package: cyberduck|Version:"
+  dpkg-deb -c linux/target/release/cyberduck_*.deb | grep -E "opt/cyberduck/bin/Cyberduck$"
+  sudo apt-get install -y ./linux/target/release/cyberduck_*.deb
+  cyberduck --version
+  xvfb-run -a cyberduck --smoke list /tmp; echo "exit=$?"
+  sudo apt-get remove -y cyberduck
+  ```
+
+  **Commit**: `Build Debian package for Linux GUI.`
+
+- [ ] **4.4 `.rpm` package**
+
+  **Do**
+  - Add the `rpm` antcall. Create `setup/rpm/cyberduck.spec` from `duck.spec` (name `cyberduck`,
+    summary `Cyberduck`, paths `/opt/cyberduck`). Use the `--verbose` jpackage output to confirm the
+    expected spec resource file name, then copy it into `${build.resources}` with the version
+    replacements from `cli/linux/build.xml`.
+
+  **Proof**
+  ```bash
+  mvn --batch-mode -pl linux -DskipSign -Drevision=0 package
+  ls linux/target/release/cyberduck-*.rpm
+  rpm -qpi linux/target/release/cyberduck-*.rpm | grep -E "^Name *: cyberduck|^License *: GPL"
+  rpm -qpl linux/target/release/cyberduck-*.rpm | grep -E "opt/cyberduck/bin/Cyberduck$"
+  ```
+  Then an install test in a Fedora container (Docker is available locally and in CI):
+  ```bash
+  docker run --rm -v "$PWD/linux/target/release:/pkg:ro" fedora:latest bash -c \
+    "dnf install -y /pkg/cyberduck-*.rpm xorg-x11-server-Xvfb >/dev/null && /opt/cyberduck/bin/Cyberduck --version && xvfb-run -a /opt/cyberduck/bin/Cyberduck --smoke list /tmp"
+  ```
+  Expect the version line and `SMOKE OK list`.
+
+  **Commit**: `Build RPM package for Linux GUI.`
+
+- [ ] **4.5 Package artifacts and install tests in the workflow**
+
+  **Do**
+  - In `linux-gui.yml` add upload steps for `linux/target/release/*.deb` and `*.rpm` using
+    `actions/upload-artifact@v7` with `archive: false`, copying the style of the
+    `Archive DEB (Linux)` step in `deploy.yml`.
+  - Add a job `install-deb` (needs `build`) on `ubuntu-latest`: download the artifact,
+    `sudo apt-get install -y ./cyberduck_*.deb`, `cyberduck --version`, and
+    `xvfb-run -a cyberduck --smoke list /tmp`.
+  - Add a job `install-rpm` (needs `build`) with `container: fedora:latest`: `dnf install` the rpm
+    and `xorg-x11-server-Xvfb`, run `--version` and the smoke.
+
+  **Proof**: `actionlint` clean; push; all three jobs green; the run's artifacts list shows the
+  `.deb` and `.rpm` files.
+
+  **Commit**: `Upload and install-test Linux packages in workflow.`
+
+- [ ] **4.6 Wire into the release pipeline**
+
+  **Do**
+  - `deploy.yml`: in the `--projects` map, change the Linux entry to
+    `i18n,profiles,cli/linux,linux`. Add archive steps for `linux/target/release/*.deb` and
+    `*.rpm` next to the existing CLI ones, and add both globs to the `Attest Build Provenance (Linux)`
+    step. Add `desktop-file-utils` to the packaging tools apt line.
+  - `release.yml`: add `release/cyberduck_*.deb` and `release/cyberduck-*.rpm` to the `files`
+    list of the `Publish Release` step, and download the new artifacts the same way the CLI ones
+    are downloaded.
+
+  **Proof**: `actionlint` on both files is clean; `git diff` shows only additive changes; the
+  operator confirms the next real release run picks up the packages (note the run URL here when
+  known). This step cannot be fully proven from a branch because `deploy.yml` uses self-hosted
+  runners and release secrets.
+
+  **Commit**: `Publish Linux GUI packages with releases.`
+
+- [ ] **4.7 Documentation**
+
+  **Do**: add a Linux section to `README.md` (how to build `linux`, where the packages land:
+  `linux/target/release/*.deb|*.rpm`), mention the module in `AGENTS.md` under platform front-ends,
+  and add a `CHANGELOG.md` entry.
+
+  **Proof**: `git diff --stat` touches only the three files; the commands in the README section
+  were copied from proofs above and run successfully.
+
+  **Commit**: `Document Linux GUI build and packages.`
+
+---
+
+## Phase 5: Beyond the minimum (ordered, each still one step with a proof)
+
+- [ ] **5.1 Secret Service password store**: `SecretToolPasswordStore` implementing
+  `HostPasswordStore` by running `secret-tool store/lookup/clear` (libsecret) with attributes
+  `service=cyberduck host port user protocol`; falls back to `UnsecureHostPasswordStore` when
+  `secret-tool` is missing. Register under `factory.passwordstore.class`. Proof: unit test that is
+  skipped when `secret-tool` is absent, otherwise stores, finds and deletes a password.
+- [ ] **5.2 Desktop notifications**: `NotifySendNotificationService` using `notify-send`, registered
+  under `factory.notification.class`; transfer completion notifies. Proof: test skipped without
+  `notify-send`; smoke download prints `notified` when available.
+- [ ] **5.3 Localization**: `applicationLocales()` returns the `*.lproj` directories found next to
+  the resources; `RegexLocale` already reads them. Proof: `LANG=de_DE.UTF-8 linux/run.sh --smoke list`
+  prints a German toolbar label captured in the OK line.
+- [ ] **5.4 Preferences window**: General (download folder, default protocol), Transfers (concurrent
+  transfers, overwrite policy), Connection (timeout, proxy). Proof: change a value, restart, value
+  persisted (`cyberduck.properties` diff).
+- [ ] **5.5 Info panel**: size, permissions (`UnixPermission` feature when present), modification
+  date, URL (`UrlProvider`). Proof: smoke `info` reports the size of a known file.
+- [ ] **5.6 Cryptomator vaults**: Create Vault (`CreateVaultWorker`) and open an existing vault
+  (`LoadVaultWorker` with `FxPasswordCallback`). Proof: integration test on the local filesystem
+  creates a vault, uploads a file, lists it through the vault, and verifies the raw directory holds
+  only encrypted names.
+- [ ] **5.7 Synchronize and copy transfers**: `SyncTransfer` with its prompt UI, in-session copy via
+  `CopyWorker`. Proof: smoke `sync` between two local directories.
+- [ ] **5.8 Drag and drop**: drop files from the desktop onto the browser to upload. Proof: manual.
+- [ ] **5.9 Flatpak manifest** under `setup/flatpak/` built from the app image. Proof:
+  `flatpak-builder` succeeds locally and `flatpak run io.cyberduck --version` prints the version.
+- [ ] **5.10 Add `linux-gui.yml` smoke suite to branch protection** as a required check (operator action).
+
+---
+
+## Appendix A: `linux/pom.xml` outline
+
+```xml
+<project ...>
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>ch.cyberduck</groupId>
+        <artifactId>parent</artifactId>
+        <relativePath>../pom.xml</relativePath>
+        <version>SAME AS cli/linux/pom.xml</version>
+    </parent>
+    <artifactId>linux</artifactId>
+    <description>Cyberduck Linux</description>
+    <packaging>jar</packaging>
+    <properties>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
+        <javafx.version>25.x.y</javafx.version>
+        <maven.main.skip>true</maven.main.skip>
+        <maven.test.skip>true</maven.test.skip>
+    </properties>
+    <profiles>
+        <profile>
+            <id>linux</id>
+            <activation><os><family>Linux</family></os></activation>
+            <properties>
+                <maven.main.skip>false</maven.main.skip>
+                <maven.test.skip>false</maven.test.skip>
+            </properties>
+            <dependencies>
+                <!-- core, protocols, cryptomator, javafx-controls, test (test-jar), junit, testcontainers (test) -->
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>enforce-bytecode-version</id>
+                                <configuration>
+                                    <rules>
+                                        <enforceBytecodeVersion>
+                                            <maxJdkVersion>1.8</maxJdkVersion>
+                                            <ignoredScopes><ignoreScope>test</ignoreScope></ignoredScopes>
+                                            <excludes><exclude>org.openjfx:*</exclude></excludes>
+                                        </enforceBytecodeVersion>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <!-- unpack-profiles (step 1.4), unpack-i18n (step 4.1); inherits copy-dependencies-* -->
+                    </plugin>
+                    <!-- maven-antrun-plugin with no configuration: added in step 4.1 -->
+                </plugins>
+            </build>
+        </profile>
+        <!-- arm64 / arm32 / x86_64 profiles copied from cli/linux/pom.xml (libjnidispatch only) -->
+    </profiles>
+</project>
+```
+
+## Appendix B: `linux/smoke.sh` contract
+
+- Runs from the repository root, uses `linux/run.sh` unless `CYBERDUCK_BIN` is set (the package
+  install tests set it to `cyberduck` or `/opt/cyberduck/bin/Cyberduck`).
+- Creates its fixtures under `mktemp -d`, removes them on exit.
+- Runs each `--smoke` mode under `timeout 120`, greps the expected `SMOKE OK ...` line, and
+  verifies filesystem effects (`sha256sum`, `test -d`, `test ! -e`).
+- Exits non-zero on the first failure and prints which mode failed.
+
+## Appendix C: `linux-gui.yml` outline (final shape after Phase 4)
+
+```yaml
+name: Linux GUI
+on:
+  push:
+    branches: [ master, 'dom/**' ]
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: { checks: write, pull-requests: write, statuses: write, contents: read, packages: read }
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: 25, cache: maven }
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb rpm fakeroot desktop-file-utils
+      - run: mvn --no-transfer-progress --batch-mode verify -DskipITs -DskipSign -Drevision=0 --also-make --projects i18n,profiles,linux
+        env: { SKIP_SIGN: true }
+      - run: xvfb-run -a linux/smoke.sh
+      - run: mvn --batch-mode -pl linux -DskipSign -Drevision=0 test -Dtest=SFTPBrowserIntegrationTest -Dsurefire.group.excluded=none
+      - uses: actions/upload-artifact@v7
+        with: { name: cyberduck-deb, path: linux/target/release/*.deb, archive: false }
+      - uses: actions/upload-artifact@v7
+        with: { name: cyberduck-rpm, path: linux/target/release/*.rpm, archive: false }
+  install-deb:
+    needs: build
+    runs-on: ubuntu-latest
+    steps: [ download cyberduck-deb, apt-get install ./cyberduck_*.deb, cyberduck --version, xvfb-run -a cyberduck --smoke list /tmp ]
+  install-rpm:
+    needs: build
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps: [ download cyberduck-rpm, dnf install -y ./cyberduck-*.rpm xorg-x11-server-Xvfb, /opt/cyberduck/bin/Cyberduck --version, xvfb-run -a /opt/cyberduck/bin/Cyberduck --smoke list /tmp ]
+```
