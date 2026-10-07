@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.cyberduck.Cyberduck</id>
+  <name>Cyberduck</name>
+  <summary>Browse and transfer files on servers and in the cloud</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>Cyberduck is a libre file transfer client. Connect to FTP, SFTP, WebDAV, Amazon S3 and many other storage
+    services, browse the files like in a file manager and upload and download them.</p>
+    <p>Files can be encrypted before they leave the computer with Cryptomator vaults.</p>
+  </description>
+  <developer id="io.cyberduck">
+    <name>iterate GmbH</name>
+  </developer>
+  <launchable type="desktop-id">io.cyberduck.Cyberduck.desktop</launchable>
+  <url type="homepage">https://cyberduck.io/</url>
+  <url type="bugtracker">https://github.com/iterate-ch/cyberduck/issues</url>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <binary>cyberduck</binary>
+  </provides>
+  <releases>
+    <release version="9.6.0" date="2026-10-07"/>
+  </releases>
+</component>

@@ -1,0 +1,45 @@
+# Flatpak of the Linux GUI. It wraps the application image that jpackage makes (linux/target/release/Cyberduck), which
+# has its own Java runtime, so the build needs no network and no Java. Build it as described in README.md.
+app-id: io.cyberduck.Cyberduck
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+command: cyberduck
+finish-args:
+  # Servers
+  - --share=network
+  - --share=ipc
+  # JavaFX draws with GTK 3 on X11, which Wayland sessions provide through XWayland
+  - --socket=x11
+  - --device=dri
+  # Files to upload and the folder to download to
+  - --filesystem=home
+  # Keys of the SSH agent
+  - --socket=ssh-auth
+  # Passwords in the keyring of the desktop and notifications of finished transfers
+  - --talk-name=org.freedesktop.secrets
+  - --talk-name=org.freedesktop.Notifications
+modules:
+  - name: cyberduck
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib/cyberduck
+      - cp -a Cyberduck/. /app/lib/cyberduck/
+      - install -Dm755 cyberduck.sh /app/bin/cyberduck
+      - install -Dm644 io.cyberduck.Cyberduck.desktop /app/share/applications/io.cyberduck.Cyberduck.desktop
+      - install -Dm644 io.cyberduck.Cyberduck.metainfo.xml /app/share/metainfo/io.cyberduck.Cyberduck.metainfo.xml
+      - install -Dm644 cyberduck-application.png /app/share/icons/hicolor/512x512/apps/io.cyberduck.Cyberduck.png
+    sources:
+      - type: dir
+        path: ../../linux/target/release/Cyberduck
+        dest: Cyberduck
+      - type: file
+        path: io.cyberduck.Cyberduck.desktop
+      - type: file
+        path: io.cyberduck.Cyberduck.metainfo.xml
+      - type: file
+        path: ../../cyberduck-application.png
+      - type: script
+        dest-filename: cyberduck.sh
+        commands:
+          - exec /app/lib/cyberduck/bin/Cyberduck "$@"

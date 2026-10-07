@@ -173,7 +173,7 @@ The packages and a runnable application folder are created by every build of the
 * `linux/target/release/cyberduck-*.rpm`
 * `linux/target/release/Cyberduck/bin/Cyberduck`
 
-Install a package with `sudo apt install ./cyberduck_*.deb` or `sudo dnf install ./cyberduck-*.rpm`. This adds a menu entry and the command `cyberduck`. Settings, bookmarks and logs are in `~/.duck`.
+Install a package with `sudo apt install ./cyberduck_*.deb` or `sudo dnf install ./cyberduck-*.rpm`. A Flatpak manifest is in `setup/flatpak`. This adds a menu entry and the command `cyberduck`. Settings, bookmarks and logs are in `~/.duck`.
 
 Run the application from the build tree with `linux/run.sh`. To test, a virtual display is enough:
 

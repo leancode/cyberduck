@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Cyberduck
+GenericName=File Transfer Client
+Comment=Browse and transfer files with FTP, SFTP, WebDAV, Amazon S3 and more
+Exec=cyberduck %U
+Icon=io.cyberduck.Cyberduck
+Terminal=false
+Categories=Network;FileTransfer;
+MimeType=x-scheme-handler/ftp;x-scheme-handler/ftps;x-scheme-handler/sftp;x-scheme-handler/s3;x-scheme-handler/dav;x-scheme-handler/davs;
+StartupNotify=true
