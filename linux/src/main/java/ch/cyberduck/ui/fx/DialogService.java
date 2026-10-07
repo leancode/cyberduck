@@ -18,6 +18,9 @@ package ch.cyberduck.ui.fx;
 import ch.cyberduck.core.Credentials;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.LoginOptions;
+import ch.cyberduck.core.transfer.TransferAction;
+
+import java.util.List;
 
 /**
  * Questions asked to the user. Separated from the callbacks of the core so that they can be tested without a window.
@@ -43,6 +46,16 @@ public interface DialogService {
      * @param suppressible  Offer to never ask again
      */
     Confirmation confirm(String title, String message, String defaultButton, String cancelButton, boolean suppressible);
+
+    /**
+     * Ask what to do when a file of a transfer already exists
+     *
+     * @param title   Short summary
+     * @param message Which file exists
+     * @param actions Choices to offer
+     * @return Chosen action or null if the transfer should be cancelled
+     */
+    TransferAction action(String title, String message, List<TransferAction> actions);
 
     /**
      * Report a failure and wait until it has been acknowledged

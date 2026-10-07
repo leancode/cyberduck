@@ -18,6 +18,7 @@ package ch.cyberduck.ui.fx;
 import ch.cyberduck.core.Credentials;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.LoginOptions;
+import ch.cyberduck.core.transfer.TransferAction;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +30,8 @@ public class FakeDialogService implements DialogService {
 
     public Credentials credentials;
     public Confirmation confirmation = Confirmation.YES;
+    public TransferAction action;
+    public final List<TransferAction> offered = new ArrayList<>();
 
     public int credentialRequests;
     public final List<String> titles = new ArrayList<>();
@@ -47,6 +50,14 @@ public class FakeDialogService implements DialogService {
         titles.add(title);
         messages.add(message);
         return confirmation;
+    }
+
+    @Override
+    public TransferAction action(final String title, final String message, final List<TransferAction> actions) {
+        titles.add(title);
+        messages.add(message);
+        offered.addAll(actions);
+        return action;
     }
 
     @Override

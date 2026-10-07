@@ -20,6 +20,8 @@ import ch.cyberduck.core.BookmarkNameProvider;
 import ch.cyberduck.core.Cache;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.ListProgressListener;
+import ch.cyberduck.core.Local;
+import ch.cyberduck.core.LocalFactory;
 import ch.cyberduck.core.NullFilter;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathCache;
@@ -33,9 +35,14 @@ import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.threading.DisconnectBackgroundAction;
 import ch.cyberduck.core.threading.WorkerBackgroundAction;
+import ch.cyberduck.core.transfer.DownloadTransfer;
+import ch.cyberduck.core.transfer.Transfer;
+import ch.cyberduck.core.transfer.TransferItem;
+import ch.cyberduck.core.transfer.TransferOptions;
 import ch.cyberduck.core.worker.ListWorker;
 import ch.cyberduck.core.worker.MountWorker;
 import ch.cyberduck.ui.browser.DefaultBrowserFilter;
+import ch.cyberduck.ui.browser.DownloadDirectoryFinder;
 import ch.cyberduck.ui.comparator.FilenameComparator;
 import ch.cyberduck.ui.comparator.OwnerComparator;
 import ch.cyberduck.ui.comparator.PermissionsComparator;
@@ -47,10 +54,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyObjectWrapper;
@@ -63,6 +73,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.SelectionMode;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
@@ -104,6 +115,7 @@ public class BrowserController extends FxController {
     private final Button back = new Button("Back");
     private final Button up = new Button("Up");
     private final Button refresh = new Button("Refresh");
+    private final Button download = new Button("Download");
     private final StringProperty summary = new SimpleStringProperty(StringUtils.EMPTY);
 
     private final Cache<Path> cache = new PathCache(preferences.getInteger("browser.cache.size"));
@@ -151,9 +163,12 @@ public class BrowserController extends FxController {
         back.setOnAction(event -> this.back());
         up.setOnAction(event -> this.up());
         refresh.setOnAction(event -> this.reload());
+        download.setOnAction(event -> this.download());
+        download.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, location);
+        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, download, location);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
 
@@ -438,6 +453,32 @@ public class BrowserController extends FxController {
 
     ConnectionDialog getConnectionDialog() {
         return connection;
+    }
+
+    /**
+     * Download the selected files to the download folder
+     */
+    void download() {
+        if(!this.isMounted()) {
+            return;
+        }
+        final List<Path> selected = new ArrayList<>(table.getSelectionModel().getSelectedItems());
+        if(selected.isEmpty()) {
+            return;
+        }
+        final Host host = pool.getHost();
+        final Local target = new DownloadDirectoryFinder().find(host);
+        log.debug("Download {} to {}", selected, target);
+        this.transfer(new DownloadTransfer(host, selected.stream()
+            .map(file -> new TransferItem(file, LocalFactory.get(target, file.getName()))).collect(Collectors.toList())));
+    }
+
+    private void transfer(final Transfer transfer) {
+        TransferController.get().start(transfer, new TransferOptions(), this, completed -> this.message(String.format("%s completed", completed.getName())));
+    }
+
+    Button getDownloadButton() {
+        return download;
     }
 
     Button getBackButton() {
