@@ -6,7 +6,15 @@ set -u
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 bin="${CYBERDUCK_BIN:-linux/run.sh}"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+pids=""
+container=""
+cleanup() {
+    # shellcheck disable=SC2086
+    [ -z "$pids" ] || kill $pids 2>/dev/null
+    [ -z "$container" ] || docker rm -f "$container" >/dev/null 2>&1
+    rm -rf "$work"
+}
+trap cleanup EXIT
 # Preferences, bookmarks and logs are written to the home folder. Never touch the real one.
 export HOME="$work/home"
 mkdir -p "$HOME"
@@ -57,5 +65,30 @@ out="$(timeout 30 "$bin" --smoke windows "$work/win-one" "$work/win-two" 2>&1)" 
 echo "$out" | grep -q '^SMOKE OK windows$' || { echo "$out"; fail "windows: expected 'SMOKE OK windows'"; }
 [ -f "$HOME/.duck/cyberduck.properties" ] || fail "windows: preferences were not saved when quitting"
 echo "ok windows"
+
+# A server with a certificate that nobody trusts. The connection must not use a proxy from the environment.
+tls_port="${CYBERDUCK_SMOKE_TLS_PORT:-18443}"
+openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=localhost -days 2 -keyout "$work/key.pem" -out "$work/cert.pem" 2>/dev/null || fail "tls: openssl could not create a certificate"
+python3 linux/tls-server.py "$tls_port" "$work/cert.pem" "$work/key.pem" &
+pids="$pids $!"
+for _ in $(seq 1 50); do (exec 3<>"/dev/tcp/127.0.0.1/$tls_port") 2>/dev/null && break; sleep 0.2; done
+out="$(env -u HTTPS_PROXY -u https_proxy -u HTTP_PROXY -u http_proxy -u ALL_PROXY -u all_proxy timeout 130 "$bin" --smoke tls "$tls_port" 2>&1)" || { echo "$out"; fail "tls failed"; }
+echo "$out" | grep -q '^SMOKE OK tls$' || { echo "$out"; fail "tls: expected 'SMOKE OK tls'"; }
+echo "ok tls"
+
+# The usable minimum against a real SFTP server in a container, when Docker is available
+if docker info >/dev/null 2>&1; then
+    image="${CYBERDUCK_SMOKE_SFTP_IMAGE:-atmoz/sftp:alpine}"
+    container="$(docker run -d --rm -p 127.0.0.1::22 "$image" foo:pass:::upload)" || fail "sftp: could not start $image"
+    sftp_port="$(docker port "$container" 22/tcp | head -1 | sed 's/.*://')"
+    for _ in $(seq 1 50); do
+        timeout 3 bash -c "exec 3<>/dev/tcp/127.0.0.1/$sftp_port; read -t 2 line <&3; [[ \$line == SSH-* ]]" 2>/dev/null && break
+        sleep 0.5
+    done
+    mkdir -p "$work/sftp"
+    smoke '^SMOKE OK sftp$' sftp 127.0.0.1 "$sftp_port" foo pass "$work/sftp"
+else
+    echo "skip sftp (Docker is not available)"
+fi
 
 echo "SMOKE SCRIPT OK"

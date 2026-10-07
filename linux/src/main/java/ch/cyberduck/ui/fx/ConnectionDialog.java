@@ -189,6 +189,18 @@ public class ConnectionDialog extends Dialog<Host> {
         return server;
     }
 
+    TextField getPortField() {
+        return port;
+    }
+
+    TextField getUsernameField() {
+        return username;
+    }
+
+    PasswordField getPasswordField() {
+        return password;
+    }
+
     TextField getPathField() {
         return path;
     }
