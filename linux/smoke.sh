@@ -72,6 +72,10 @@ chmod +x "$work/fakebin/notify-send"
 PATH="$work/fakebin:$PATH" smoke '^SMOKE OK download progress=[0-9]+$' download "$work/down-src" "$work/down-dst"
 grep -qx 'Download complete' "$work/notify.log" || fail "download: no notification was sent"
 echo "ok notified"
+
+# The properties of a file: size from the listing, permissions and address read from the session
+chmod 640 "$work/down-src/f.bin"
+smoke '^SMOKE OK info size=1048576 permissions=rw-r----- \(640\) url=file://' info "$work/down-src" f.bin
 [ "$(sha256sum < "$work/down-src/f.bin")" = "$(sha256sum < "$work/down-dst/f.bin")" ] || fail "download: checksum of the downloaded file differs"
 
 mkdir -p "$work/up-src" "$work/up-dst" && head -c 1048576 /dev/urandom > "$work/up-src/g.bin"

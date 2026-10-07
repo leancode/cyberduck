@@ -147,6 +147,7 @@ public class BrowserController extends FxController {
     private final StringProperty summary = new SimpleStringProperty(StringUtils.EMPTY);
 
     private final Cache<Path> cache = new PathCache(preferences.getInteger("browser.cache.size"));
+    private final List<InfoController> infos = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final ListProgressListener listener = new ListProgressListener() {
         @Override
         public void chunk(final Path directory, final AttributedList<Path> list) {
@@ -316,6 +317,10 @@ public class BrowserController extends FxController {
         final MenuItem closeWindow = new MenuItem(Messages.get("Close Window"));
         closeWindow.setAccelerator(KeyCombination.keyCombination("Shortcut+W"));
         closeWindow.setOnAction(event -> this.close());
+        final MenuItem info = new MenuItem(Messages.get("Get Info"));
+        info.setAccelerator(KeyCombination.keyCombination("Shortcut+I"));
+        info.setOnAction(event -> this.info());
+        info.disableProperty().bind(Bindings.size(table.getSelectionModel().getSelectedItems()).isNotEqualTo(1));
         final MenuItem preferencesItem = new MenuItem(Messages.get("Preferences…"));
         preferencesItem.setAccelerator(KeyCombination.keyCombination("Shortcut+,"));
         preferencesItem.setOnAction(event -> PreferencesController.get().show());
@@ -326,9 +331,28 @@ public class BrowserController extends FxController {
         showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
         showTransfers.setOnAction(event -> TransferController.get().show());
         menu = new MenuBar(
-            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
             new Menu(Messages.get("Window"), null, showTransfers));
         return menu;
+    }
+
+    /**
+     * Show the properties of the selected file or folder
+     */
+    void info() {
+        final Path selected = table.getSelectionModel().getSelectedItem();
+        if(selected != null && this.isMounted()) {
+            final InfoController window = new InfoController(this, pool, cache, selected);
+            infos.add(window);
+            window.show();
+        }
+    }
+
+    /**
+     * @return The windows with properties opened so far
+     */
+    List<InfoController> getInfos() {
+        return infos;
     }
 
     MenuBar getMenuBar() {
