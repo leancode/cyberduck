@@ -316,6 +316,9 @@ public class BrowserController extends FxController {
         final MenuItem closeWindow = new MenuItem(Messages.get("Close Window"));
         closeWindow.setAccelerator(KeyCombination.keyCombination("Shortcut+W"));
         closeWindow.setOnAction(event -> this.close());
+        final MenuItem preferencesItem = new MenuItem(Messages.get("Preferences…"));
+        preferencesItem.setAccelerator(KeyCombination.keyCombination("Shortcut+,"));
+        preferencesItem.setOnAction(event -> PreferencesController.get().show());
         final MenuItem quit = new MenuItem(Messages.get("Quit"));
         quit.setAccelerator(KeyCombination.keyCombination("Shortcut+Q"));
         quit.setOnAction(event -> MainController.get().quit());
@@ -323,7 +326,7 @@ public class BrowserController extends FxController {
         showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
         showTransfers.setOnAction(event -> TransferController.get().show());
         menu = new MenuBar(
-            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
             new Menu(Messages.get("Window"), null, showTransfers));
         return menu;
     }
