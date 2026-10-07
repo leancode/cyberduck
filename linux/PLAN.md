@@ -595,7 +595,7 @@ of a hang on failure.
   - Smoke `upload` mirrors `download`: the second upload meets a different remote file and the real `File exists` dialog is
     answered with Overwrite while the old remote content is still in place. `chooseAction` is shared by both.
 
-- [ ] **2.9 Transfer window**
+- [x] **2.9 Transfer window**
 
   **Do**
   - `TransferController`: a second `Stage` with a `TableView<Transfer>` bound to
@@ -612,6 +612,21 @@ of a hang on failure.
   ```
 
   **Commit**: `Add transfer window.`
+
+  **Done (executor notes)**
+  - The window lives in `TransferController` (one per application): a table of the `TransferCollection` with Name, Status and a
+    progress bar, and the buttons Stop, Resume, Remove, Clear and Open Folder. The browser has a Transfers button.
+    The collection only has two transfer states (running, stopped), so the status is `Running` (or the live progress text),
+    `Complete` or `Incomplete`. Stop cancels the matching `TransferBackgroundAction` in the controller's registry. Resume starts
+    the same transfer with `resume(true).reload(false)`.
+  - Progress events come from a 100 ms timer in the core. To see them the smoke throttles the transfer with the preference
+    `queue.download.bandwidth.bytes` (256 KiB/s for the first download, 64 KiB/s for the stop and resume test). It checks the
+    live fraction is strictly between 0 and 1, then the status `Complete`, then `SMOKE OK download progress=<n>` with `n >= 1`
+    (40 here). A stopped transfer is `Incomplete` with only part of the file, and after `setBandwidth(-1)` and Resume the
+    content is complete. Remove empties the table.
+  - `factory.reveal.class` is `XdgOpenRevealService`, which opens the containing folder with `xdg-open`. It passes the path as a
+    separate argument, unlike `ExecApplicationLauncher`, which builds one command string and breaks on paths with spaces.
+  - Cosmetic follow-up: the live status text is long and gets cut off in the Status column. Widen the column or shorten the text.
 
 - [ ] **2.10 File operations: new folder, delete, rename**
 
