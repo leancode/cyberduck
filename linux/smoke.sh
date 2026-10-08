@@ -104,6 +104,10 @@ echo "ok notified"
 mkdir -p "$work/perm/d" && echo x > "$work/perm/f.txt" && chmod 640 "$work/perm/f.txt" && echo y > "$work/perm/d/inside.txt"
 smoke '^SMOKE OK chmod boxes=600 octal=664 recursive=700$' chmod "$work/perm" f.txt
 
+# The menus of the right mouse button on a file, a folder and the empty area
+mkdir -p "$work/ctx/sub" && echo x > "$work/ctx/f.txt"
+smoke '^SMOKE OK context file=[0-9]+ folder=[0-9]+ empty=[0-9]+$' context "$work/ctx"
+
 # The properties of a file: size from the listing, permissions and address read from the session
 chmod 640 "$work/down-src/f.bin"
 smoke '^SMOKE OK info size=1048576 permissions=rw-r----- \(640\) url=file://' info "$work/down-src" f.bin
