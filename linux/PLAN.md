@@ -1288,6 +1288,131 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
     list of transfers of the next start and the download scenario counts them.
   - `smoke.sh` starts an FTP server next to the SFTP one when Docker works, and the packages of the workflow include `xdotool`.
 
+- [x] **6.12 Gap list: what the existing applications have and the Linux version does not** (list only, nothing built)
+
+  **Request**: compare the Linux version with the existing applications and the documentation (https://docs.cyberduck.io/cyberduck/
+  and https://supporthost.com/cyberduck/), and list every feature that is missing and every difference in the GUI.
+
+  **Sources, and what could not be done**: the network policy of the working environment blocks both sites
+  (`docs.cyberduck.io` and `supporthost.com`), so **neither page was read**. The list is built from the GUI definitions of the two existing
+  applications in this repository (macOS: `Main`, `Browser`, `Preferences`, `Info`, `Bookmark`, `Connection` strings and the commands of
+  `BrowserController`; Windows: the forms in `windows/src/main/csharp/.../winforms` and the screenshots of the owner) and from
+  knowledge of the documentation. Rows that come only from the documentation, and not from the code of this repository, are marked
+  **(docs)**. To check the list against the two sites, allow these two domains in the network settings of the environment and ask for a
+  second pass. What exists in the Linux version is taken from its code, not from memory.
+
+  Column "Linux?" is a suggestion for the decision, not a decision: **Yes** is likely wanted, **Maybe** depends on how it is used, **No**
+  does not make sense on Linux or is not worth it. Strike what is not needed and the rest becomes the list of steps.
+
+  **A. Connecting and logging in**
+
+  | # | Feature | Existing application | Linux today | Linux? |
+  |---|---|---|---|---|
+  | A1 | SSH private key: choose a key file, passphrase from the keyring | Bookmark and Open Connection: "SSH Private Key" with Choose | No field. Only passwords. ssh-agent and `~/.ssh/config` were not checked | **Yes**, the usual way to log in with SFTP |
+  | A2 | Client certificate for TLS | Bookmark: "Client Certificate" | No certificate chooser, the callback is not registered | Maybe |
+  | A3 | Quick Connect field in the toolbar, type a URL and press return | Toolbar (macOS, Windows) | The Open Connection dialog takes a URL, but there is no field | **Yes**, cheap |
+  | A4 | "Add to keychain / Save password" choice in the connection dialog | Open Connection | Asked only in the login prompt | Yes |
+  | A5 | Bookmark fields: Web URL, Timezone, Labels, download folder per bookmark, Region | Bookmark window | Nickname, protocol, server, port, user, path, anonymous, encoding, connect mode, transfer mode | Maybe (Web URL and download folder are the useful ones) |
+  | A6 | Duplicate bookmark, sort by nickname, hostname or protocol, drag to reorder, groups by label, search in bookmarks | Bookmark list and menu | Add, Edit, Delete, connect | Yes for duplicate and sort |
+  | A7 | Bookmark view sizes: large, medium, small icons; protocol icon per bookmark | Preferences, Bookmarks | One list without icons | Maybe |
+  | A8 | Import bookmarks from other clients (FileZilla, WinSCP and others; the `importer` module exists) and `~/.ssh/config` **(docs)** | Windows and macOS | Nothing | **Yes**, FileZilla and ssh config |
+  | A9 | History of connections, as a view next to the bookmarks | View switch (macOS, Windows) | Nothing | Maybe |
+  | A10 | Bonjour discovery of servers in the network | View switch (macOS, Windows) | Nothing, would need Avahi | No or low |
+  | A11 | Connection profiles: install more profiles from the list of profiles | Preferences, Profiles (macOS) | Bundled profiles and files in the user folder, no screen | Maybe |
+  | A12 | Choose the application that opens `ftp://` and `sftp://` links | Preferences, Default protocol handler | The desktop entry claims the schemes, no setting | Low |
+  | A13 | Other protocols and their login flows: FTP-TLS, WebDAV, S3 and compatible services, Azure, Swift, Backblaze B2, Google Drive and Cloud Storage, Dropbox, OneDrive, Box, Nextcloud, DRACOON, Storegate, Brick, SMB, iRODS and the rest of the bundled profiles | All | Profiles are loaded, **only SFTP and local were used on a desktop**, FTP and the TLS prompt were tested against test servers. The browser login of the OAuth services is untested | **Yes**, verify one by one |
+  | A14 | Security padlock in the browser window that shows the certificate or host key of the connection | Browser window | Prompts only when connecting | Maybe |
+
+  **B. The browser window**
+
+  | # | Feature | Existing application | Linux today | Linux? |
+  |---|---|---|---|---|
+  | B1 | Forward button, Go menu: Forward, Enclosing Folder, Inside, Go to Folder | Toolbar and Go menu | Back (history) and Up, a typed path | **Yes** (Forward) |
+  | B2 | Path pop-up to jump to a parent folder | Toolbar | Typed path only | Maybe |
+  | B3 | Search or filter the listing by name | Search field, Edit, Search… | Nothing | **Yes** |
+  | B4 | Outline view (folders expand in place) as well as the list | View, as List or as Outline; tree in Windows | List only | Maybe |
+  | B5 | Choose the columns: Group, Kind, Extension, Region, Storage class, Version, Checksum | View, Column | Filename, Size, Modified, Permissions, Owner | Maybe |
+  | B6 | Show Hidden Files in the View menu with a shortcut | View | Only a setting in Preferences | **Yes** |
+  | B7 | Icons per file type and folder, thumbnails | Listing | Text only | **Yes**, looks unfinished without them |
+  | B8 | Toolbar with icons and labels, an Action (gear) menu, Get Info, Edit, Disconnect as buttons, "Customize Toolbar…", "Hide Toolbar" | Toolbar | Text buttons for connect, back, up, refresh, download, upload, new folder, rename, delete, transfers. No Edit, Info or Disconnect button, not customizable | Maybe (icons yes, customize no) |
+  | B9 | Activity window of everything running | Window, Activity | Transfers window only | Maybe |
+  | B10 | Log drawer with the commands sent to the server | Window, Toggle Log Drawer | Nothing, the program writes the file `~/.duck/cyberduck.log` | **Yes**, for support |
+  | B11 | Tabs in a browser window | Windows, macOS | Only more windows | Maybe |
+  | B12 | Cut, Copy, Paste of remote files to move or copy inside a connection or between two windows | Edit | Duplicate with a new name only | **Yes** |
+  | B13 | Drag files inside the listing to move them, spring-loaded folders, drag between two browser windows | Listing | Drag in from the desktop and out to the desktop only | **Yes** (move) |
+  | B14 | Keyboard: Delete key removes, Return or F2 renames, Backspace goes up, type to select, Select All | Listing | Return opens, menu shortcuts for New Browser, Open, Close, Edit, Duplicate, Info, Preferences, Quit, Transfers | **Yes** |
+  | B15 | Window menu: Minimize, Bring All to Front, list of windows; Save Workspace and restore the connections at start | Menus, Preferences | Window menu with Transfers only | Maybe (restore at start) |
+  | B16 | Quick Look preview, Print, Undo and Redo | macOS menus | Nothing | No |
+  | B17 | Registration key button and Donate in the window | Windows toolbar, menu | Nothing | No, decide (the Linux version is free) |
+  | B18 | Selection count and details in the status bar | Status bar | Number of items | Low |
+
+  **C. File and folder commands**
+
+  | # | Feature | Existing application | Linux today | Linux? |
+  |---|---|---|---|---|
+  | C1 | New File… (empty file, then open in the editor) | File menu | New Folder only | **Yes** |
+  | C2 | New Symbolic Link… | File menu | Nothing | Maybe |
+  | C3 | Download To… and Download As… (choose the folder or the name for this download), New Download from a URL | File menu | Download goes to the folder of the preferences | **Yes** |
+  | C4 | Copy URL (with the choice of the URL types), Open URL, Open in Web Browser | Edit, File menu | The URL is shown in Info only | **Yes** |
+  | C5 | Share… (pre-signed or shared link) and Request files… (link to upload to a folder) | File menu | Nothing | Maybe, cloud services |
+  | C6 | Revert and Restore (file versions), "Show all versions" | File menu, Info, Versions | Nothing | Maybe (S3, Dropbox) |
+  | C7 | Create Archive, Expand Archive on the server | File menu | Nothing | Maybe |
+  | C8 | Open in Terminal (a terminal with `ssh` into the folder) | File menu | Nothing | **Yes** for SFTP |
+  | C9 | Send Command… (a command on the server) | File menu | Nothing | Maybe |
+  | C10 | Info: Calculate the size of a folder, the checksum of a file, Info for several files, "Info window always shows the current selection" | Info window | One file, size and permissions | **Yes** (calculate) |
+  | C11 | Info tabs for cloud services: Metadata (headers), Distribution (CDN) and invalidation, S3 (storage class, encryption, ACL, access logging, versioning, lifecycle, transfer acceleration, MFA delete, location), Versions | Info window | Nothing | Maybe, if S3 is used |
+  | C12 | Edit permissions for ACL services; set the grantees | Info, Permissions (ACL) | Unix permissions only | Maybe |
+  | C13 | Synchronize with a list of what will change (each file with an arrow, include or exclude) | Synchronize prompt | One choice of the direction | Maybe |
+  | C14 | The prompt for existing files shows both files with size and date, "apply to all", and for several files the list with a tick for each | Download and upload prompt | A dialog with the name and a choice of the action | Maybe |
+  | C15 | Open the downloaded file when the transfer is done | Preferences, Transfers | Nothing | Maybe |
+
+  **D. Transfers**
+
+  | # | Feature | Existing application | Linux today | Linux? |
+  |---|---|---|---|---|
+  | D1 | Speed, time left, the file that is transferred, count of files per transfer | Transfers window | Name, status, progress bar | **Yes** |
+  | D2 | Bandwidth limit for uploads and downloads, and per transfer | Preferences, Transfers; Transfers window | Nothing | **Yes** |
+  | D3 | Segmented downloads with several connections per file | Preferences, Transfers | Core default, no setting | Low |
+  | D4 | Upload with a temporary name, preserve the modification date, change permissions on upload and download, skip files by regular expression, verify the checksum | Preferences, Transfers | Core defaults, no settings | Maybe |
+  | D5 | Queue: how many transfers run at once, use the browser connection or new connections | Preferences, Transfers | One choice: browser, new connection or concurrent | Low |
+  | D6 | After a transfer: bring the window to front, close it, remove it from the list | Preferences, Transfers | The window opens when a transfer starts | Low |
+  | D7 | Reload a transfer, "Show in Finder" for each file | Transfers window | Resume, Open Folder for the transfer | Low |
+  | D8 | The "where from" mark and quarantine of downloaded files | Preferences | Not applicable | No |
+
+  **E. Preferences**
+
+  | # | Feature | Existing application | Linux today | Linux? |
+  |---|---|---|---|---|
+  | E1 | Language choice | Preferences, General | The language of the session (`LANGUAGE` or `LANG`), no setting. New labels are not translated | **Yes** |
+  | E2 | Open a new browser at start, restore connections, confirm before closing a connection, double click opens the editor, Return renames, "Save passwords" | Preferences, General and Browser | Nothing | Maybe |
+  | E3 | Appearance: icon sizes, alternating row colour, horizontal and vertical lines | Preferences, Appearance | System theme only | No |
+  | E4 | Proxy settings in detail; system proxy | Preferences, Connection | A check box for the system proxy | Maybe |
+  | E5 | Protocol settings: S3 (storage class, encryption, default ACL, location, versioning), SFTP, FTP (partly done in 6.9), Cryptomator (detect a vault and open it) | Preferences | Cryptomator vault version only through the core default | Maybe |
+  | E6 | Debug log switch and where the log is | Preferences | Nothing | **Yes** |
+  | E7 | Check for updates and install them | Preferences, Update; Help menu | Nothing, packages come from a repository or a download | No, or only a notice |
+
+  **F. Application and help**
+
+  | # | Feature | Existing application | Linux today | Linux? |
+  |---|---|---|---|---|
+  | F1 | Help menu: Cyberduck Help (documentation), Report a Bug, Acknowledgments, License, Privacy Policy | Help menu | No Help menu | **Yes** |
+  | F2 | About window with the version | Application menu | `--version` on the command line only | **Yes** |
+  | F3 | Crash report dialog | macOS, Windows | Nothing | No |
+  | F4 | Integration with the file manager and the operating system: services, Spotlight, Explorer | macOS, Windows | Desktop entry and URL schemes | No |
+  | F5 | Dark theme, HiDPI, Wayland, screen readers | System | Not checked, JavaFX uses GTK 3 over X11 | **Yes**, check |
+  | F6 | Translations of the labels that exist only in the Linux version | All languages | English | Maybe |
+  | F7 | Flatpak (5.9), the `.rpm` and the `.deb` on other releases than Ubuntu 24.04, an apt and dnf repository | Not applicable | `.deb` and `.rpm` from CI | Maybe |
+
+  **Differences in how it looks** (summary of the above): the existing toolbar has icons with a text under each and an Action menu, the Linux one has plain text
+  buttons; the existing lists show icons for protocols and file types; the existing browser has the view switch (bookmarks, history, Bonjour), the search field, the
+  Quick Connect field, a path pop-up and a lock for the connection; the info window of the existing applications has tabs; the existing preferences are a window of panes
+  with many more settings (E); the Linux window title and the Window menu are simpler.
+
+- [ ] **6.13 Decide and build**
+
+  Go through 6.12, strike what Linux does not need, and give each remaining row its own step 6.14 and on, in the same form as the steps
+  above (request, done, proof). Nothing of 6.12 is built yet.
+
 ---
 
 ## Appendix A: `linux/pom.xml` outline
