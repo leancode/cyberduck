@@ -18,6 +18,8 @@ package ch.cyberduck.ui.fx;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.ProtocolFactory;
+import ch.cyberduck.core.local.ApplicationFinder;
+import ch.cyberduck.core.local.ApplicationFinderFactory;
 import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.transfer.Transfer;
@@ -44,6 +46,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 
@@ -85,6 +88,11 @@ public final class PreferencesController {
             return label;
         }
     }
+
+    /**
+     * Choice for downloads that is not an action of the core, kept in the preference linux.download.compare
+     */
+    static final String COMPARE_TOOL = "compare-tool";
 
     private final Preferences preferences;
     private Stage stage;
@@ -147,6 +155,7 @@ public final class PreferencesController {
         final TabPane tabs = new TabPane(
             new Tab(Messages.get("General"), this.general()),
             new Tab(Messages.get("Transfers"), this.transfers()),
+            new Tab(Messages.get("Applications"), this.applications()),
             new Tab(Messages.get("Connection"), this.connection()));
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         return tabs;
@@ -218,19 +227,32 @@ public final class PreferencesController {
         final List<Choice> choices = new ArrayList<>();
         choices.add(new Choice("ask", Messages.get("Ask me what to do")));
         for(TransferAction action : TransferAction.forTransfer(type)) {
-            choices.add(new Choice(action.name(), action.getTitle()));
+            // The core names it Compare, but it skips the files that did not change and shows nothing
+            choices.add(new Choice(action.name(), TransferAction.comparison.equals(action) ? Messages.get("Skip files that did not change") : action.getTitle()));
+        }
+        if(Transfer.Type.download == type) {
+            choices.add(new Choice(COMPARE_TOOL, Messages.get("Compare in a program")));
         }
         return choices;
     }
 
     private void choose(final ComboBox<Choice> box, final List<Choice> choices, final String property, final String fallback) {
         box.getItems().setAll(choices);
-        final String current = preferences.getProperty(property);
+        final String current = "queue.download.action".equals(property) && preferences.getBoolean("linux.download.compare")
+            ? COMPARE_TOOL : preferences.getProperty(property);
         box.setValue(choices.stream().filter(c -> c.getValue().equals(current)).findFirst()
             .orElse(choices.stream().filter(c -> c.getValue().equals(fallback)).findFirst().orElse(null)));
         box.valueProperty().addListener((observable, previous, selected) -> {
             if(selected != null) {
-                this.save(property, selected.getValue());
+                if("queue.download.action".equals(property)) {
+                    // The program for comparing is not known to the core, which is asked when the file exists
+                    final boolean compare = COMPARE_TOOL.equals(selected.getValue());
+                    preferences.setProperty("linux.download.compare", compare);
+                    this.save(property, compare ? "ask" : selected.getValue());
+                }
+                else {
+                    this.save(property, selected.getValue());
+                }
             }
         });
     }
@@ -275,6 +297,109 @@ public final class PreferencesController {
         });
     }
 
+    private final ApplicationPicker defaultEditor = new ApplicationPicker(ApplicationFinderFactory.get(), Messages.get("System default"));
+    private final CheckBox alwaysDefault = new CheckBox(Messages.get("Always use the default editor"));
+    private final ApplicationPicker compareTool = new ApplicationPicker(ApplicationFinderFactory.get(), null);
+    private final javafx.scene.control.TableView<String[]> editorTypes = new javafx.scene.control.TableView<>();
+
+    /**
+     * File extensions that have an editor of their own
+     */
+    private List<String> types() {
+        final List<String> types = new ArrayList<>();
+        for(String type : StringUtils.defaultString(preferences.getProperty("linux.editor.types")).split(",")) {
+            if(StringUtils.isNotBlank(type)) {
+                types.add(type.trim().toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+        return types;
+    }
+
+    private void showTypes() {
+        editorTypes.getItems().clear();
+        for(String type : this.types()) {
+            editorTypes.getItems().add(new String[]{type, StringUtils.defaultString(preferences.getProperty("linux.editor." + type))});
+        }
+    }
+
+    void setEditorForType(final String extension, final String command) {
+        final String type = StringUtils.removeStart(extension.trim().toLowerCase(java.util.Locale.ROOT), ".");
+        if(StringUtils.isBlank(type)) {
+            return;
+        }
+        final List<String> types = this.types();
+        if(StringUtils.isBlank(command)) {
+            types.remove(type);
+            preferences.deleteProperty("linux.editor." + type);
+        }
+        else {
+            if(!types.contains(type)) {
+                types.add(type);
+            }
+            preferences.setProperty("linux.editor." + type, command);
+        }
+        preferences.setProperty("linux.editor.types", String.join(",", types));
+        preferences.save();
+        this.showTypes();
+    }
+
+    private Parent applications() {
+        final GridPane grid = this.grid();
+        final ApplicationFinder finder = ApplicationFinderFactory.get();
+        defaultEditor.setApplications(finder.findAll("file.txt"));
+        defaultEditor.setCommand(preferences.getProperty("editor.bundleIdentifier"));
+        defaultEditor.onChange(command -> this.save("editor.bundleIdentifier", command));
+        grid.addRow(0, new Label(Messages.get("Default Editor")), defaultEditor);
+        alwaysDefault.setSelected(preferences.getBoolean("editor.alwaysUseDefault"));
+        alwaysDefault.setOnAction(event -> this.save("editor.alwaysUseDefault", alwaysDefault.isSelected()));
+        grid.add(alwaysDefault, 1, 1);
+
+        // An editor for each file type, for example txt, md or php
+        final javafx.scene.control.TableColumn<String[], String> extension = new javafx.scene.control.TableColumn<>(Messages.get("File Type"));
+        extension.setCellValueFactory(row -> new javafx.beans.property.SimpleStringProperty(row.getValue()[0]));
+        extension.setPrefWidth(110);
+        final javafx.scene.control.TableColumn<String[], String> editor = new javafx.scene.control.TableColumn<>(Messages.get("Editor"));
+        editor.setCellValueFactory(row -> new javafx.beans.property.SimpleStringProperty(finder.getDescription(row.getValue()[1]).getName()));
+        editor.setPrefWidth(300);
+        editorTypes.getColumns().setAll(extension, editor);
+        editorTypes.setPrefHeight(120);
+        editorTypes.setPlaceholder(new Label(Messages.get("No editors for file types")));
+        this.showTypes();
+        final Button add = new Button(Messages.get("Add…"));
+        add.setOnAction(event -> this.addType());
+        final Button remove = new Button(Messages.get("Remove"));
+        remove.disableProperty().bind(editorTypes.getSelectionModel().selectedItemProperty().isNull());
+        remove.setOnAction(event -> this.setEditorForType(editorTypes.getSelectionModel().getSelectedItem()[0], StringUtils.EMPTY));
+        grid.add(new Label(Messages.get("Editor for File Type")), 0, 2);
+        grid.add(new VBox(6, editorTypes, new HBox(8, add, remove)), 1, 2);
+
+        compareTool.setApplications(CompareTools.installed());
+        compareTool.setCommand(CompareTools.preferred().getIdentifier());
+        compareTool.onChange(command -> this.save(CompareTools.PROPERTY, command));
+        grid.addRow(3, new Label(Messages.get("Compare Files")), compareTool);
+        GridPane.setHgrow(defaultEditor, Priority.ALWAYS);
+        return grid;
+    }
+
+    private void addType() {
+        final javafx.scene.control.Dialog<String[]> dialog = new javafx.scene.control.Dialog<>();
+        dialog.initOwner(stage);
+        dialog.setTitle(Messages.get("Editor for File Type"));
+        final TextField extension = new TextField();
+        extension.setPromptText("txt");
+        final ApplicationPicker picker = new ApplicationPicker(ApplicationFinderFactory.get(), null);
+        picker.setApplications(ApplicationFinderFactory.get().findAll("file.txt"));
+        final GridPane content = this.grid();
+        content.addRow(0, new Label(Messages.get("File Type")), extension);
+        content.addRow(1, new Label(Messages.get("Editor")), picker);
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(javafx.scene.control.ButtonType.OK, javafx.scene.control.ButtonType.CANCEL);
+        dialog.getDialogPane().lookupButton(javafx.scene.control.ButtonType.OK).disableProperty().bind(
+            extension.textProperty().isEmpty());
+        dialog.setResultConverter(type -> type == javafx.scene.control.ButtonType.OK ? new String[]{extension.getText(), picker.getCommand()} : null);
+        dialog.showAndWait().ifPresent(result -> this.setEditorForType(result[0], result[1]));
+    }
+
     private Parent connection() {
         final GridPane grid = this.grid();
         this.commit(timeout, "connection.timeout.seconds");
@@ -285,6 +410,22 @@ public final class PreferencesController {
         proxy.setOnAction(event -> this.save("connection.proxy.enable", proxy.isSelected()));
         grid.add(proxy, 1, 2);
         return grid;
+    }
+
+    ApplicationPicker getDefaultEditor() {
+        return defaultEditor;
+    }
+
+    ApplicationPicker getCompareTool() {
+        return compareTool;
+    }
+
+    CheckBox getAlwaysDefault() {
+        return alwaysDefault;
+    }
+
+    javafx.scene.control.TableView<String[]> getEditorTypes() {
+        return editorTypes;
     }
 
     TextField getDownloadFolder() {

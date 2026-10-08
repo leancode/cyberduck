@@ -34,6 +34,7 @@ import javafx.application.Platform;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -146,5 +147,75 @@ public class PreferencesControllerTest {
         next.setDefaults();
         next.load();
         assertEquals(standard, next.getProperty("queue.download.folder"));
+    }
+
+    @Test
+    public void testCompareInAProgramIsNotAnActionOfTheCore() throws Exception {
+        final LinuxApplicationPreferences preferences = new LinuxApplicationPreferences(this.file());
+        preferences.setDefaults();
+        preferences.load();
+        final PreferencesController window = new PreferencesController(preferences);
+        onFx(() -> {
+            window.build();
+            // The core compare is named for what it does
+            assertTrue(window.getDownloadAction().getItems().stream().anyMatch(c -> "compare".equals(c.getValue()) && c.toString().startsWith("Skip")));
+            window.getDownloadAction().setValue(window.getDownloadAction().getItems().stream().filter(c -> PreferencesController.COMPARE_TOOL.equals(c.getValue())).findFirst().orElseThrow());
+            return null;
+        });
+        final LinuxApplicationPreferences next = new LinuxApplicationPreferences(this.file());
+        next.setDefaults();
+        next.load();
+        assertTrue(next.getBoolean("linux.download.compare"));
+        // The core only knows its own actions
+        assertEquals("ask", next.getProperty("queue.download.action"));
+        final PreferencesController reopened = new PreferencesController(next);
+        onFx(() -> {
+            reopened.build();
+            assertEquals(PreferencesController.COMPARE_TOOL, reopened.getDownloadAction().getValue().getValue());
+            reopened.getDownloadAction().setValue(reopened.getDownloadAction().getItems().stream().filter(c -> "overwrite".equals(c.getValue())).findFirst().orElseThrow());
+            return null;
+        });
+        final LinuxApplicationPreferences last = new LinuxApplicationPreferences(this.file());
+        last.setDefaults();
+        last.load();
+        assertFalse(last.getBoolean("linux.download.compare"));
+        assertEquals("overwrite", last.getProperty("queue.download.action"));
+    }
+
+    @Test
+    public void testEditorsForFileTypes() throws Exception {
+        final LinuxApplicationPreferences preferences = new LinuxApplicationPreferences(this.file());
+        preferences.setDefaults();
+        preferences.load();
+        final PreferencesController window = new PreferencesController(preferences);
+        onFx(() -> {
+            window.build();
+            window.setEditorForType(".TXT", "/usr/bin/first");
+            window.setEditorForType("md", "/usr/bin/second");
+            assertEquals(2, window.getEditorTypes().getItems().size());
+            window.getDefaultEditor().getBox().getItems();
+            window.getAlwaysDefault().fire();
+            return null;
+        });
+        final LinuxApplicationPreferences next = new LinuxApplicationPreferences(this.file());
+        next.setDefaults();
+        next.load();
+        assertEquals("/usr/bin/first", next.getProperty("linux.editor.txt"));
+        assertEquals("/usr/bin/second", next.getProperty("linux.editor.md"));
+        assertEquals("txt,md", next.getProperty("linux.editor.types"));
+        assertTrue(next.getBoolean("editor.alwaysUseDefault"));
+        onFx(() -> {
+            final PreferencesController reopened = new PreferencesController(next);
+            reopened.build();
+            assertEquals(2, reopened.getEditorTypes().getItems().size());
+            reopened.setEditorForType("txt", "");
+            assertEquals(1, reopened.getEditorTypes().getItems().size());
+            return null;
+        });
+        final LinuxApplicationPreferences last = new LinuxApplicationPreferences(this.file());
+        last.setDefaults();
+        last.load();
+        assertEquals("md", last.getProperty("linux.editor.types"));
+        assertNull(last.getProperty("linux.editor.txt"));
     }
 }

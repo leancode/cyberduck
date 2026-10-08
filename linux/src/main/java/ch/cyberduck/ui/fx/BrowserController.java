@@ -75,11 +75,14 @@ import ch.cyberduck.ui.comparator.PermissionsComparator;
 import ch.cyberduck.ui.comparator.SizeComparator;
 import ch.cyberduck.ui.comparator.TimestampComparator;
 
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -355,6 +358,7 @@ public class BrowserController extends FxController {
     private MenuItem lockVaultRow;
     private MenuItem openRow;
     private MenuItem editRow;
+    private MenuItem compareRow;
 
     private MenuItem item(final String text, final Runnable action) {
         final MenuItem item = new MenuItem(text);
@@ -378,6 +382,7 @@ public class BrowserController extends FxController {
             openRow,
             this.item(Messages.get("Download"), this::download),
             editRow = this.item(Messages.get("Edit"), this::edit),
+            compareRow = this.item(Messages.get("Compare") + "…", this::compare),
             editWithRow,
             new SeparatorMenuItem(),
             this.item(Messages.get("Get Info"), this::info),
@@ -408,6 +413,7 @@ public class BrowserController extends FxController {
         }
         if(selected != null) {
             editRow.setVisible(selected.isFile());
+            compareRow.setVisible(selected.isFile());
             editWithRow.setVisible(selected.isFile());
             if(selected.isFile()) {
                 editWithRow.getItems().clear();
@@ -456,6 +462,10 @@ public class BrowserController extends FxController {
         edit.setOnAction(event -> this.edit());
         edit.disableProperty().bind(Bindings.createBooleanBinding(
             () -> table.getSelectionModel().getSelectedItems().stream().noneMatch(Path::isFile), table.getSelectionModel().getSelectedItems()));
+        final MenuItem compareItem = new MenuItem(Messages.get("Compare") + "…");
+        compareItem.setOnAction(event -> this.compare());
+        compareItem.disableProperty().bind(Bindings.createBooleanBinding(
+            () -> table.getSelectionModel().getSelectedItems().stream().noneMatch(Path::isFile), table.getSelectionModel().getSelectedItems()));
         final MenuItem duplicate = new MenuItem(Messages.get("Duplicate File") + "…");
         duplicate.setAccelerator(KeyCombination.keyCombination("Shortcut+D"));
         duplicate.setOnAction(event -> this.duplicate());
@@ -488,7 +498,7 @@ public class BrowserController extends FxController {
         showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
         showTransfers.setOnAction(event -> TransferController.get().show());
         menu = new MenuBar(
-            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), edit, duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), edit, compareItem, duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
             new Menu(Messages.get("Window"), null, showTransfers));
         return menu;
     }
@@ -936,9 +946,80 @@ public class BrowserController extends FxController {
         }
         final Host host = pool.getHost();
         final Local target = new DownloadDirectoryFinder().find(host);
-        log.debug("Download {} to {}", selected, target);
-        this.transfer(new DownloadTransfer(host, selected.stream()
+        // When files that exist should be compared, they go to the program for comparing and only the others are downloaded
+        final List<Path> download = new ArrayList<>();
+        for(Path file : selected) {
+            if(preferences.getBoolean("linux.download.compare") && file.isFile() && LocalFactory.get(target, file.getName()).exists()) {
+                this.compare(file, LocalFactory.get(target, file.getName()));
+            }
+            else {
+                download.add(file);
+            }
+        }
+        if(download.isEmpty()) {
+            return;
+        }
+        log.debug("Download {} to {}", download, target);
+        this.transfer(new DownloadTransfer(host, download.stream()
             .map(file -> new TransferItem(file, LocalFactory.get(target, file.getName()))).collect(Collectors.toList())));
+    }
+
+    /**
+     * Compare the selected files with the files of the same name in the folder for downloads. Ask for the file when
+     * there is none.
+     */
+    void compare() {
+        if(!this.isMounted()) {
+            return;
+        }
+        final Local target = new DownloadDirectoryFinder().find(pool.getHost());
+        for(Path selected : new ArrayList<>(table.getSelectionModel().getSelectedItems())) {
+            if(!selected.isFile()) {
+                continue;
+            }
+            Local local = LocalFactory.get(target, selected.getName());
+            if(!local.exists()) {
+                final FileChooser chooser = new FileChooser();
+                chooser.setTitle(String.format(Messages.get("Compare %s with"), selected.getName()));
+                if(new File(target.getAbsolute()).isDirectory()) {
+                    chooser.setInitialDirectory(new File(target.getAbsolute()));
+                }
+                final File file = chooser.showOpenDialog(stage);
+                if(null == file) {
+                    continue;
+                }
+                local = LocalFactory.get(file.getAbsolutePath());
+            }
+            this.compare(selected, local);
+        }
+    }
+
+    /**
+     * Download the file from the server again to a place of its own, without touching the file on this computer, and
+     * show both in the program for comparing
+     */
+    void compare(final Path remote, final Local local) {
+        final Application tool = CompareTools.preferred();
+        if(Application.notfound.equals(tool)) {
+            dialogs.error(Messages.get("Compare"), Messages.get("No program to compare files was found. Install one such as Meld or choose one in the preferences."));
+            return;
+        }
+        final Local copy;
+        try {
+            final String extension = FilenameUtils.getExtension(remote.getName());
+            copy = LocalFactory.get(Files.createTempDirectory("cyberduck-compare").toString(),
+                String.format("%s (server)%s", FilenameUtils.getBaseName(remote.getName()), StringUtils.isEmpty(extension) ? "" : "." + extension));
+        }
+        catch(IOException e) {
+            dialogs.error(Messages.get("Compare"), e.getMessage());
+            return;
+        }
+        log.debug("Compare {} with {} using {}", local, remote, tool);
+        TransferController.get().start(new DownloadTransfer(pool.getHost(), remote, copy), new TransferOptions(), this, completed -> {
+            if(completed.isComplete()) {
+                new LinuxApplicationLauncher().open(tool, List.of(local.getAbsolute(), copy.getAbsolute()));
+            }
+        });
     }
 
     /**
