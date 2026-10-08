@@ -114,6 +114,9 @@ public final class Smoke {
                 case "duplicate":
                     System.out.println(duplicate(browser, arguments.get(1)));
                     return 0;
+                case "compare":
+                    System.out.println(compare(browser, arguments.get(1), arguments.get(2), arguments.get(3), arguments.get(4)));
+                    return 0;
                 case "edit":
                     System.out.println(edit(browser, arguments.get(1), arguments.get(2), arguments.get(3)));
                     return 0;
@@ -1437,5 +1440,55 @@ public final class Smoke {
         await("default editor changed the file", () -> content(c).equals("original by markdown"));
         log.debug("Edited files");
         return "SMOKE OK edit text=ok markdown=ok chosen=ok default=ok";
+    }
+
+    /**
+     * Compare a file on the server with the one in the folder for downloads in the program for comparing. The server
+     * file is downloaded again as a copy of its own and the local file stays as it is. With the setting to compare files
+     * that exist, a download does this for the files that exist and downloads the others.
+     *
+     * @param remote    Folder on the server with f.txt ("remote content") and g.txt
+     * @param downloads Folder for downloads with f.txt ("local content")
+     * @param tool      Program for comparing that appends its two arguments to the log, one per line
+     * @param log       File with what the program was given
+     */
+    private static String compare(final BrowserController browser, final String remote, final String downloads, final String tool, final String log) throws Exception {
+        PreferencesFactory.get().setProperty("queue.download.folder", downloads);
+        PreferencesFactory.get().setProperty(CompareTools.PROPERTY, tool);
+        mount(browser, remote);
+        final java.nio.file.Path local = java.nio.file.Paths.get(downloads, "f.txt");
+        final java.nio.file.Path logged = java.nio.file.Paths.get(log);
+
+        select(browser, "f.txt");
+        onFx(() -> {
+            browser.compare();
+            return null;
+        });
+        await("program started", () -> java.nio.file.Files.exists(logged) && java.nio.file.Files.readAllLines(logged).size() >= 2);
+        List<String> lines = java.nio.file.Files.readAllLines(logged);
+        check("the program got the file on this computer first: " + lines, local.toString().equals(lines.get(0)));
+        check("and a copy of the server file second: " + lines, lines.get(1).endsWith("/f (server).txt"));
+        check("the copy has the server content", "remote content".equals(content(java.nio.file.Paths.get(lines.get(1)))));
+        check("the file on this computer was not touched", "local content".equals(content(local)));
+
+        // With the setting, a download compares what exists and downloads the rest
+        PreferencesFactory.get().setProperty("linux.download.compare", true);
+        onFx(() -> {
+            browser.getTable().getSelectionModel().clearSelection();
+            for(int i = 0; i < browser.getTable().getItems().size(); i++) {
+                final Path item = browser.getTable().getItems().get(i);
+                if(item.getName().equals("f.txt") || item.getName().equals("g.txt")) {
+                    browser.getTable().getSelectionModel().select(i);
+                }
+            }
+            browser.getDownloadButton().fire();
+            return null;
+        });
+        await("g.txt downloaded", () -> content(java.nio.file.Paths.get(downloads, "g.txt")).equals("remote g"));
+        await("program started again", () -> java.nio.file.Files.readAllLines(logged).size() >= 4);
+        lines = java.nio.file.Files.readAllLines(logged);
+        check("the second run compares f.txt too: " + lines, local.toString().equals(lines.get(2)));
+        check("the file on this computer is still the local one", "local content".equals(content(local)));
+        return "SMOKE OK compare launched=2 downloaded=g.txt";
     }
 }

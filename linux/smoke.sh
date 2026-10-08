@@ -113,6 +113,15 @@ printf '#!/bin/sh\nsleep 2\nprintf " by markdown" >> "$1"\n' > "$work/edit-markd
 chmod +x "$work/edit-text.sh" "$work/edit-markdown.sh"
 HOME="$work/home-vault" smoke '^SMOKE OK edit text=ok markdown=ok chosen=ok default=ok$' edit "$work/edit" "$work/edit-text.sh" "$work/edit-markdown.sh"
 
+# Compare with a program: the file on this computer first and a new copy of the server file second
+mkdir -p "$work/cmp-remote" "$work/cmp-down"
+printf 'remote content' > "$work/cmp-remote/f.txt"
+printf 'remote g' > "$work/cmp-remote/g.txt"
+printf 'local content' > "$work/cmp-down/f.txt"
+printf '#!/bin/sh\nprintf "%%s\\n%%s\\n" "$1" "$2" >> "%s/cmp-log.txt"\n' "$work" > "$work/cmp-tool.sh"
+chmod +x "$work/cmp-tool.sh"
+HOME="$work/home-vault" smoke '^SMOKE OK compare launched=2 downloaded=g.txt$' compare "$work/cmp-remote" "$work/cmp-down" "$work/cmp-tool.sh" "$work/cmp-log.txt"
+
 # The menus of the right mouse button on a file, a folder and the empty area
 mkdir -p "$work/ctx/sub" && echo x > "$work/ctx/f.txt"
 smoke '^SMOKE OK context file=[0-9]+ folder=[0-9]+ empty=[0-9]+$' context "$work/ctx"
