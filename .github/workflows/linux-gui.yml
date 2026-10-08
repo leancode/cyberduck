@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - 'dom/**'
+      - cyberduck-linuxgui
   pull_request:
 
 concurrency:
