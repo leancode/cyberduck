@@ -218,4 +218,28 @@ public class PreferencesControllerTest {
         assertEquals("md", last.getProperty("linux.editor.types"));
         assertNull(last.getProperty("linux.editor.txt"));
     }
+
+    @Test
+    public void testFtpDefaults() throws Exception {
+        final LinuxApplicationPreferences preferences = new LinuxApplicationPreferences(this.file());
+        preferences.setDefaults();
+        preferences.load();
+        final PreferencesController window = new PreferencesController(preferences);
+        onFx(() -> {
+            window.build();
+            assertEquals("UTF-8", window.getEncoding().getValue());
+            assertEquals("binary", window.getFtpTransferMode().getValue().getValue());
+            window.getEncoding().setValue("windows-1252");
+            window.getFtpTransferMode().setValue(window.getFtpTransferMode().getItems().stream().filter(c -> "auto".equals(c.getValue())).findFirst().orElseThrow());
+            window.getAsciiExtensions().setText("txt, php");
+            window.getAsciiExtensions().fireEvent(new javafx.event.ActionEvent());
+            return null;
+        });
+        final LinuxApplicationPreferences next = new LinuxApplicationPreferences(this.file());
+        next.setDefaults();
+        next.load();
+        assertEquals("windows-1252", next.getProperty("browser.charset.encoding"));
+        assertEquals("auto", next.getProperty("ftp.transfer.mode"));
+        assertEquals("txt, php", next.getProperty("ftp.transfer.ascii.extensions"));
+    }
 }
