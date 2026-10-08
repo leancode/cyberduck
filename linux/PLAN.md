@@ -778,7 +778,7 @@ later publishes packages.
     display. (3) `xvfb-run -a linux/smoke.sh`.
   - Packages needed on the runner: `xvfb libgtk-3-0t64 libgl1 libxtst6` (JavaFX needs GTK 3 and OpenGL). Python 3, OpenSSL and
     Docker are already on `ubuntu-latest`, which `smoke.sh` needs for the TLS and SFTP scenarios.
-  - The push trigger covers `master` and `dom/**`. A new push to the same branch cancels the run in progress, so wait for a run to
+  - The push trigger covers `master`, `cyberduck-linuxgui` and `dom/**`. A new push to the same branch cancels the run in progress, so wait for a run to
     finish before pushing again when you need its result.
   - Reading a run from the agent: `mcp__github__actions_list` (`list_workflow_runs`, `list_workflow_jobs`) and
     `mcp__github__get_job_logs` with `tail_lines`.
@@ -1494,7 +1494,7 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
 name: Linux GUI
 on:
   push:
-    branches: [ master, 'dom/**' ]
+    branches: [ master, cyberduck-linuxgui, 'dom/**' ]
   pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
