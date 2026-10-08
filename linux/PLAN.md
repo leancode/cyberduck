@@ -1490,11 +1490,17 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
 - [x] **7.2b Release after every push to `main`** (decided 2026-10-08)
 
   The workflow `linux-release.yml` starts when a run of `Linux GUI` on `main` ends well, builds that commit for x64 and arm64 and creates a release `linux-v<version>` (the version is the one in the name of the package, the build number is the number of commits), marked as the latest release, with the deb, the rpm and `SHA256SUMS`. A tag `v*-linux.*` still makes a pre-release for a named version. A run that failed makes no release. A release that exists is not made twice. Releases are not removed by the workflow; if the list gets long, old ones can be deleted by hand or a rule added.
-  - [ ] The first release made by the workflow.
+  - [x] The first release made by the workflow: `linux-v9.6.0.45947` (2026-10-08). It was made before the history of `main` was rewritten (see 7.4), so its tag points at the old tip. To be deleted by the owner on GitHub, the session may not delete releases or tags.
+  - [x] The check "the commit passed the tests" asked the list of runs and found none a second after the run had finished. For a finished run of `Linux GUI` the event is the proof, the list is only asked for tags and manual starts.
+  - [ ] The first release of the new history.
 
 - [x] **7.2c Version numbers go up with every build**
 
   The workflow `linux-gui.yml` built with `-Drevision=0`, so its packages were all `9.6.0.0`, while the packages of the release workflow are `9.6.0.<number of commits>`. On 2026-10-08 the Package Installer of Linux Mint refused a `9.6.0.0` package with "A later version is already installed", because a package of the release dry run was installed. Both workflows now build with the number of commits, so a newer commit is always a newer version.
+
+- [x] **7.4 Authorship** (2026-10-08)
+
+  The commits of `main` were authored and committed as `Claude <noreply@anthropic.com>`, and 66 of them ended with a `Claude-Session:` link, against the rule of the owner and of `AGENTS.md` ("Commits and pull requests are attributed to their human author"). The 69 commits that are not in `master` were rewritten on the owner's order, as `Dom <leancode@users.noreply.github.com>` without the link, and `main` was force-pushed. The content of every file is the same (checked with a diff of the old and the new tip). No attribution of a tool goes into commits, pull requests, releases or files.
 
 - [ ] **7.2 First release**
 
