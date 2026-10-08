@@ -33,6 +33,11 @@ import ch.cyberduck.core.SessionPoolFactory;
 import ch.cyberduck.core.UserDateFormatterFactory;
 import ch.cyberduck.core.formatter.SizeFormatterFactory;
 import ch.cyberduck.core.pool.SessionPool;
+import ch.cyberduck.core.local.ApplicationFinderFactory;
+import ch.cyberduck.core.local.Application;
+import ch.cyberduck.core.editor.EditorFactory;
+import ch.cyberduck.core.editor.Editor;
+import ch.cyberduck.core.editor.DefaultEditorListener;
 import ch.cyberduck.core.worker.LockVaultWorker;
 import ch.cyberduck.core.worker.LoadVaultWorker;
 import ch.cyberduck.core.worker.CreateVaultWorker;
@@ -343,10 +348,13 @@ public class BrowserController extends FxController {
         return column;
     }
 
+    private final Map<Path, Editor> editors = new java.util.concurrent.ConcurrentHashMap<>();
     private final ContextMenu rowMenu = new ContextMenu();
+    private final Menu editWithRow = new Menu();
     private final ContextMenu emptyMenu = new ContextMenu();
     private MenuItem lockVaultRow;
     private MenuItem openRow;
+    private MenuItem editRow;
 
     private MenuItem item(final String text, final Runnable action) {
         final MenuItem item = new MenuItem(text);
@@ -364,10 +372,13 @@ public class BrowserController extends FxController {
                 this.open(selected);
             }
         });
+        editWithRow.setText(Messages.get("Edit With"));
         lockVaultRow = this.item(Messages.get("Unlock Vault"), this::lockUnlockVault);
         rowMenu.getItems().setAll(
             openRow,
             this.item(Messages.get("Download"), this::download),
+            editRow = this.item(Messages.get("Edit"), this::edit),
+            editWithRow,
             new SeparatorMenuItem(),
             this.item(Messages.get("Get Info"), this::info),
             new SeparatorMenuItem(),
@@ -396,6 +407,19 @@ public class BrowserController extends FxController {
             return;
         }
         if(selected != null) {
+            editRow.setVisible(selected.isFile());
+            editWithRow.setVisible(selected.isFile());
+            if(selected.isFile()) {
+                editWithRow.getItems().clear();
+                for(Application application : ApplicationFinderFactory.get().findAll(selected.getName())) {
+                    editWithRow.getItems().add(this.item(application.getName(), () -> this.edit(application, selected)));
+                }
+                if(editWithRow.getItems().isEmpty()) {
+                    final MenuItem none = new MenuItem(Messages.get("None"));
+                    none.setDisable(true);
+                    editWithRow.getItems().add(none);
+                }
+            }
             lockVaultRow.setVisible(selected.isDirectory());
             lockVaultRow.setText(Messages.get(pool.getVaultRegistry().contains(selected) ? "Lock Vault" : "Unlock Vault"));
         }
@@ -427,6 +451,11 @@ public class BrowserController extends FxController {
         final MenuItem closeWindow = new MenuItem(Messages.get("Close Window"));
         closeWindow.setAccelerator(KeyCombination.keyCombination("Shortcut+W"));
         closeWindow.setOnAction(event -> this.close());
+        final MenuItem edit = new MenuItem(Messages.get("Edit"));
+        edit.setAccelerator(KeyCombination.keyCombination("Shortcut+E"));
+        edit.setOnAction(event -> this.edit());
+        edit.disableProperty().bind(Bindings.createBooleanBinding(
+            () -> table.getSelectionModel().getSelectedItems().stream().noneMatch(Path::isFile), table.getSelectionModel().getSelectedItems()));
         final MenuItem duplicate = new MenuItem(Messages.get("Duplicate File") + "…");
         duplicate.setAccelerator(KeyCombination.keyCombination("Shortcut+D"));
         duplicate.setOnAction(event -> this.duplicate());
@@ -459,9 +488,37 @@ public class BrowserController extends FxController {
         showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
         showTransfers.setOnAction(event -> TransferController.get().show());
         menu = new MenuBar(
-            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), edit, duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
             new Menu(Messages.get("Window"), null, showTransfers));
         return menu;
+    }
+
+    /**
+     * Download the selected files, open them in the editor for their type and upload them again when they are saved
+     */
+    void edit() {
+        for(Path selected : new ArrayList<>(table.getSelectionModel().getSelectedItems())) {
+            if(selected.isFile()) {
+                this.edit(EditorFactory.getEditor(selected.getName()), selected);
+            }
+        }
+    }
+
+    void edit(final Application application, final Path file) {
+        if(!this.isMounted()) {
+            return;
+        }
+        final Editor editor = editors.computeIfAbsent(file, f -> EditorFactory.instance().create(pool.getHost(), f, this));
+        this.background(new WorkerBackgroundAction<>(this, pool, editor.open(application, () -> editors.remove(file),
+            new DefaultEditorListener(this, pool, editor, () -> {
+                this.message(String.format("%s saved", file.getName()));
+                this.invoke(new DefaultMainAction() {
+                    @Override
+                    public void run() {
+                        reload();
+                    }
+                });
+            }))));
     }
 
     /**

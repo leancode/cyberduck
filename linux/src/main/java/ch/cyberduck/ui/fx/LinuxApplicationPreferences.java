@@ -20,7 +20,6 @@ import ch.cyberduck.core.cryptomator.DefaultVaultProvider;
 import ch.cyberduck.core.editor.DefaultEditorFactory;
 import ch.cyberduck.core.i18n.RegexLocale;
 import ch.cyberduck.core.local.DefaultSymlinkFeature;
-import ch.cyberduck.core.local.ExecApplicationLauncher;
 import ch.cyberduck.core.preferences.DefaultPreferences;
 import ch.cyberduck.core.preferences.UserHomeSupportDirectoryFinder;
 import ch.cyberduck.core.proxy.EnvironmentVariableProxyFinder;
@@ -165,7 +164,8 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
         this.setDefault("factory.applicationresourcesfinder.class", LinuxApplicationResourcesFinder.class.getName());
         this.setDefault("factory.locale.class", RegexLocale.class.getName());
         this.setDefault("factory.browserlauncher.class", XdgOpenBrowserLauncher.class.getName());
-        this.setDefault("factory.applicationlauncher.class", ExecApplicationLauncher.class.getName());
+        this.setDefault("factory.applicationlauncher.class", LinuxApplicationLauncher.class.getName());
+        this.setDefault("factory.applicationfinder.class", LinuxApplicationFinder.class.getName());
         this.setDefault("factory.reveal.class", XdgOpenRevealService.class.getName());
         this.setDefault("factory.editorfactory.class", DefaultEditorFactory.class.getName());
         this.setDefault("factory.proxy.class", EnvironmentVariableProxyFinder.class.getName());
