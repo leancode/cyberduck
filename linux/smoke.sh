@@ -100,6 +100,10 @@ PATH="$work/fakebin:$PATH" smoke '^SMOKE OK download progress=[0-9]+$' download 
 grep -qx 'Download complete' "$work/notify.log" || fail "download: no notification was sent"
 echo "ok notified"
 
+# Change permissions in the info window: boxes, octal number and a folder with what it contains
+mkdir -p "$work/perm/d" && echo x > "$work/perm/f.txt" && chmod 640 "$work/perm/f.txt" && echo y > "$work/perm/d/inside.txt"
+smoke '^SMOKE OK chmod boxes=600 octal=664 recursive=700$' chmod "$work/perm" f.txt
+
 # The properties of a file: size from the listing, permissions and address read from the session
 chmod 640 "$work/down-src/f.bin"
 smoke '^SMOKE OK info size=1048576 permissions=rw-r----- \(640\) url=file://' info "$work/down-src" f.bin

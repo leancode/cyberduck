@@ -114,6 +114,9 @@ public final class Smoke {
                 case "duplicate":
                     System.out.println(duplicate(browser, arguments.get(1)));
                     return 0;
+                case "chmod":
+                    System.out.println(chmod(browser, arguments.get(1), arguments.get(2)));
+                    return 0;
                 case "info":
                     System.out.println(info(browser, arguments.get(1), arguments.get(2)));
                     return 0;
@@ -1228,5 +1231,73 @@ public final class Smoke {
      */
     private static String content(final java.nio.file.Path file) throws java.io.IOException {
         return java.nio.file.Files.exists(file) ? new String(java.nio.file.Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8).trim() : "";
+    }
+
+    /**
+     * Change the permissions of a file with the boxes and the octal number of the info window, and of a folder with
+     * what it contains
+     *
+     * @param directory Folder with the file
+     * @param name      File with mode 640 and a folder d with a file inside
+     */
+    private static String chmod(final BrowserController browser, final String directory, final String name) throws Exception {
+        mount(browser, directory);
+        final java.nio.file.Path file = java.nio.file.Paths.get(directory, name);
+        select(browser, name);
+        onFx(() -> {
+            browser.getMenuBar().getMenus().get(0).getItems().stream().filter(i -> "Get Info".equals(i.getText())).findFirst().orElseThrow().fire();
+            return null;
+        });
+        await("info window", () -> onFx(() -> !browser.getInfos().isEmpty() && browser.getInfos().get(0).getStage().isShowing()));
+        final InfoController info = browser.getInfos().get(0);
+        await("permissions shown", () -> onFx(() -> "640".equals(info.getOctal().getText())));
+        check("the window can change them", !onFx(() -> info.getApply().isDisabled()));
+        // With the boxes: take away what the group may read
+        onFx(() -> {
+            info.getBit(1, 0).fire();
+            return null;
+        });
+        check("the boxes changed the number", "600".equals(onFx(() -> info.getOctal().getText())));
+        onFx(() -> {
+            info.getApply().fire();
+            return null;
+        });
+        await("mode 600 on disk", () -> "rw-------".equals(java.nio.file.attribute.PosixFilePermissions.toString(java.nio.file.Files.getPosixFilePermissions(file))));
+        // With the number
+        onFx(() -> {
+            info.getOctal().setText("664");
+            info.getApply().fire();
+            return null;
+        });
+        await("mode 664 on disk", () -> "rw-rw-r--".equals(java.nio.file.attribute.PosixFilePermissions.toString(java.nio.file.Files.getPosixFilePermissions(file))));
+        onFx(() -> {
+            info.getStage().close();
+            return null;
+        });
+
+        // A folder and what is in it
+        final java.nio.file.Path folder = java.nio.file.Paths.get(directory, "d");
+        final java.nio.file.Path inside = folder.resolve("inside.txt");
+        select(browser, "d");
+        onFx(() -> {
+            browser.getMenuBar().getMenus().get(0).getItems().stream().filter(i -> "Get Info".equals(i.getText())).findFirst().orElseThrow().fire();
+            return null;
+        });
+        await("second info window", () -> onFx(() -> browser.getInfos().size() == 2 && browser.getInfos().get(1).getStage().isShowing()));
+        final InfoController second = browser.getInfos().get(1);
+        check("the option for enclosed items is there for a folder", onFx(() -> second.getRecursive().isVisible()));
+        onFx(() -> {
+            second.getOctal().setText("700");
+            second.getRecursive().setSelected(true);
+            second.getApply().fire();
+            return null;
+        });
+        await("folder and file inside changed", () -> "rwx------".equals(java.nio.file.attribute.PosixFilePermissions.toString(java.nio.file.Files.getPosixFilePermissions(folder)))
+            && "rwx------".equals(java.nio.file.attribute.PosixFilePermissions.toString(java.nio.file.Files.getPosixFilePermissions(inside))));
+        onFx(() -> {
+            second.getStage().close();
+            return null;
+        });
+        return "SMOKE OK chmod boxes=600 octal=664 recursive=700";
     }
 }

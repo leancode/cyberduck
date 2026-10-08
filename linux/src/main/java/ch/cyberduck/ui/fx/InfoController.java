@@ -22,28 +22,38 @@ import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathAttributes;
 import ch.cyberduck.core.Permission;
 import ch.cyberduck.core.Session;
+import ch.cyberduck.core.StaticPermission;
 import ch.cyberduck.core.UrlProvider;
 import ch.cyberduck.core.UserDateFormatterFactory;
 import ch.cyberduck.core.exception.BackgroundException;
+import ch.cyberduck.core.features.UnixPermission;
 import ch.cyberduck.core.formatter.SizeFormatterFactory;
 import ch.cyberduck.core.pool.SessionPool;
 import ch.cyberduck.core.threading.WorkerBackgroundAction;
 import ch.cyberduck.core.worker.AttributesWorker;
 import ch.cyberduck.core.worker.Worker;
+import ch.cyberduck.core.worker.WritePermissionWorker;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.text.MessageFormat;
+import java.util.Collections;
 import java.util.EnumSet;
 
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 /**
@@ -67,6 +77,14 @@ public final class InfoController {
     private final Label size = new Label();
     private final Label modified = new Label();
     private final Label permissions = new Label();
+    /**
+     * Read, write and execute for the owner, the group and the others
+     */
+    private final CheckBox[][] bits = new CheckBox[3][3];
+    private final TextField octal = new TextField();
+    private final CheckBox recursive = new CheckBox(Messages.get("Apply changes to enclosed items"));
+    private final Button apply = new Button(Messages.get("Apply"));
+    private boolean updating;
     private final Label owner = new Label();
     private final Label group = new Label();
     private final TextField url = new TextField();
@@ -84,7 +102,7 @@ public final class InfoController {
     public void show() {
         stage = new Stage();
         stage.setTitle(MessageFormat.format(Messages.get("{0} Info"), file.getName()));
-        stage.setScene(new Scene(this.build(), 480, 320));
+        stage.setScene(new Scene(this.build(), 520, 520));
         this.update(file.attributes());
         stage.show();
         controller.background(new WorkerBackgroundAction<>(controller, pool, new AttributesWorker(cache, file) {
@@ -111,7 +129,7 @@ public final class InfoController {
         }));
     }
 
-    private GridPane build() {
+    GridPane build() {
         final GridPane grid = new GridPane();
         grid.setHgap(12);
         grid.setVgap(8);
@@ -125,10 +143,118 @@ public final class InfoController {
         grid.addRow(row++, new Label(Messages.get("Size")), size);
         grid.addRow(row++, new Label(Messages.get("Modified")), modified);
         grid.addRow(row++, new Label(Messages.get("Permissions")), permissions);
+        grid.add(this.editor(), 1, row++);
         grid.addRow(row++, new Label(Messages.get("Owner")), owner);
         grid.addRow(row++, new Label(Messages.get("Group")), group);
         grid.addRow(row, new Label(Messages.get("URL")), url);
         return grid;
+    }
+
+    /**
+     * Boxes for what the owner, the group and the others may do and the same as an octal number
+     */
+    private Node editor() {
+        final GridPane boxes = new GridPane();
+        boxes.setHgap(14);
+        boxes.setVgap(4);
+        final String[] columns = {Messages.get("Read"), Messages.get("Write"), Messages.get("Execute")};
+        final String[] rows = {Messages.get("Owner"), Messages.get("Group"), Messages.get("Others")};
+        for(int c = 0; c < 3; c++) {
+            boxes.add(new Label(columns[c]), c + 1, 0);
+        }
+        for(int r = 0; r < 3; r++) {
+            boxes.add(new Label(rows[r]), 0, r + 1);
+            for(int c = 0; c < 3; c++) {
+                final CheckBox box = new CheckBox();
+                bits[r][c] = box;
+                box.setOnAction(event -> this.showOctal());
+                boxes.add(box, c + 1, r + 1);
+            }
+        }
+        octal.setPrefColumnCount(4);
+        octal.setMaxWidth(70);
+        octal.textProperty().addListener((observable, previous, text) -> this.showBoxes(text));
+        apply.setOnAction(event -> this.apply());
+        final HBox line = new HBox(10, new Label(Messages.get("Octal")), octal, apply);
+        line.setAlignment(Pos.CENTER_LEFT);
+        final VBox editor = new VBox(8, boxes, line, recursive);
+        // What can be changed depends on the protocol
+        final boolean editable = null != pool && null != pool.getFeature(UnixPermission.class);
+        editor.setDisable(!editable);
+        recursive.setVisible(file.isDirectory());
+        recursive.setManaged(file.isDirectory());
+        return editor;
+    }
+
+    private void showOctal() {
+        if(updating) {
+            return;
+        }
+        updating = true;
+        try {
+            final StringBuilder text = new StringBuilder();
+            for(int r = 0; r < 3; r++) {
+                text.append((bits[r][0].isSelected() ? 4 : 0) + (bits[r][1].isSelected() ? 2 : 0) + (bits[r][2].isSelected() ? 1 : 0));
+            }
+            octal.setText(text.toString());
+        }
+        finally {
+            updating = false;
+        }
+    }
+
+    private void showBoxes(final String text) {
+        if(updating || null == text || !text.matches("[0-7]{3}") || null == bits[0][0]) {
+            return;
+        }
+        updating = true;
+        try {
+            for(int r = 0; r < 3; r++) {
+                final int digit = text.charAt(r) - '0';
+                bits[r][0].setSelected((digit & 4) != 0);
+                bits[r][1].setSelected((digit & 2) != 0);
+                bits[r][2].setSelected((digit & 1) != 0);
+            }
+        }
+        finally {
+            updating = false;
+        }
+    }
+
+    /**
+     * @return The permissions as entered or null when the octal number is not valid
+     */
+    Permission entered() {
+        if(!octal.getText().matches("[0-7]{3}")) {
+            return null;
+        }
+        return new StaticPermission(
+            Permission.Action.values()[octal.getText().charAt(0) - '0'],
+            Permission.Action.values()[octal.getText().charAt(1) - '0'],
+            Permission.Action.values()[octal.getText().charAt(2) - '0']);
+    }
+
+    /**
+     * Change the permissions of the file, and of what it contains if selected
+     */
+    void apply() {
+        final Permission permission = this.entered();
+        if(null == permission || null == controller) {
+            return;
+        }
+        final boolean descend = file.isDirectory() && recursive.isSelected();
+        apply.setDisable(true);
+        controller.background(new WorkerBackgroundAction<>(controller, pool,
+            new WritePermissionWorker(Collections.singletonList(file), permission, (directory, value) -> descend, controller) {
+                @Override
+                public void cleanup(final Boolean result, final BackgroundException failure) {
+                    super.cleanup(result, failure);
+                    apply.setDisable(false);
+                    file.attributes().setPermission(permission);
+                    update(file.attributes());
+                    controller.reload();
+                }
+            }));
     }
 
     /**
@@ -150,6 +276,10 @@ public final class InfoController {
         final Permission permission = attributes.getPermission();
         permissions.setText(null == permission || Permission.EMPTY.equals(permission) ? StringUtils.EMPTY
             : String.format("%s (%s)", permission.getSymbol(), permission.getMode()));
+        if(permission != null && !Permission.EMPTY.equals(permission)) {
+            octal.setText(permission.getMode());
+            this.showBoxes(octal.getText());
+        }
         owner.setText(StringUtils.defaultString(attributes.getOwner()));
         group.setText(StringUtils.defaultString(attributes.getGroup()));
     }
@@ -171,6 +301,22 @@ public final class InfoController {
 
     Label getPermissions() {
         return permissions;
+    }
+
+    TextField getOctal() {
+        return octal;
+    }
+
+    CheckBox getBit(final int row, final int column) {
+        return bits[row][column];
+    }
+
+    Button getApply() {
+        return apply;
+    }
+
+    CheckBox getRecursive() {
+        return recursive;
     }
 
     TextField getUrl() {
