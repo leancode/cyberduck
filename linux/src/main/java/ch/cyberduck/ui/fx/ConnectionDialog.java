@@ -108,6 +108,14 @@ public class ConnectionDialog extends Dialog<Host> {
         this.setTitle(bookmark ? (null == initial ? "New Bookmark" : "Edit Bookmark") : "Open Connection");
         this.getDialogPane().getButtonTypes().addAll(connect, ButtonType.CANCEL);
         this.getDialogPane().setContent(this.build());
+        // Without the animation the size is right when the window is measured
+        more.setAnimated(false);
+        // The window grows and shrinks with the options, so that the buttons stay in view
+        more.expandedProperty().addListener((observable, was, expanded) -> javafx.application.Platform.runLater(() -> {
+            if(this.getDialogPane().getScene() != null && this.getDialogPane().getScene().getWindow() != null) {
+                this.getDialogPane().getScene().getWindow().sizeToScene();
+            }
+        }));
 
         // Validate when pressing connect and keep the dialog open to show the problem
         final Button button = this.getConnectButton();

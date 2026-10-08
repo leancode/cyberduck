@@ -102,7 +102,7 @@ public final class Smoke {
                     hold();
                     return 0;
                 case "locale":
-                    System.out.printf("SMOKE OK locale refresh=%s%n", onFx(() -> browser.getRefresh().getText()));
+                    System.out.printf("SMOKE OK locale refresh=%s%n", onFx(() -> browser.getRefresh().getAccessibleText()));
                     hold();
                     return 0;
                 case "vault":
@@ -1001,6 +1001,23 @@ public final class Smoke {
             return null;
         });
         await("bookmark dialog", () -> onFx(() -> null != controller.getDialog() && controller.getDialog().isShowing()));
+        // More Options makes the window taller, so that the buttons stay in view
+        final double closed = onFx(() -> controller.getDialog().getDialogPane().getScene().getWindow().getHeight());
+        onFx(() -> {
+            check("the options are offered for SFTP", controller.getDialog().getMore().isVisible());
+            controller.getDialog().getMore().setExpanded(true);
+            return null;
+        });
+        await("window grown", () -> onFx(() -> controller.getDialog().getDialogPane().getScene().getWindow().getHeight() > closed));
+        check("the buttons are in view", onFx(() -> {
+            final javafx.scene.Node button = controller.getDialog().getConnectButton();
+            final javafx.scene.Scene scene = button.getScene();
+            return button.localToScene(button.getBoundsInLocal()).getMaxY() <= scene.getHeight() + 1;
+        }));
+        onFx(() -> {
+            controller.getDialog().getMore().setExpanded(false);
+            return null;
+        });
         onFx(() -> {
             final ConnectionDialog dialog = controller.getDialog();
             dialog.getNicknameField().setText("Local test");

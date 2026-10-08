@@ -37,8 +37,18 @@ public final class TerminalLauncher {
      */
     public static final String PROPERTY = "linux.terminal";
 
-    private static final List<String> KNOWN = List.of("x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal",
-        "mate-terminal", "tilix", "kitty", "alacritty", "foot", "xterm");
+    /**
+     * The terminals that are known, the ones of the big desktops first. The alternative x-terminal-emulator comes last,
+     * because it stands for a program that may not take the command in the same way.
+     */
+    private static final List<String> KNOWN = List.of("gnome-terminal", "konsole", "xfce4-terminal", "mate-terminal",
+        "tilix", "kitty", "alacritty", "foot", "xterm", "x-terminal-emulator");
+
+    /**
+     * Where the desktops keep the terminal of the user
+     */
+    private static final List<String> SCHEMAS = List.of("org.cinnamon.desktop.default-applications.terminal",
+        "org.gnome.desktop.default-applications.terminal", "org.mate.applications-terminal");
 
     private TerminalLauncher() {
         //
@@ -64,12 +74,45 @@ public final class TerminalLauncher {
         if(StringUtils.isNotBlank(chosen)) {
             return chosen;
         }
+        // The terminal that the desktop of the user is set to
+        for(String schema : SCHEMAS) {
+            final String configured = setting(schema);
+            if(StringUtils.isNotBlank(configured) && finder.isInstalled(new LinuxApplication(configured, configured))) {
+                return configured;
+            }
+        }
         for(String terminal : KNOWN) {
             if(finder.isInstalled(new LinuxApplication(terminal, terminal))) {
                 return terminal;
             }
         }
         return null;
+    }
+
+    /**
+     * @return The program that a desktop has as its terminal, or null when it has none
+     */
+    private static String setting(final String schema) {
+        try {
+            final Process process = new ProcessBuilder("gsettings", "get", schema, "exec")
+                .redirectErrorStream(true).redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();
+            if(!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return null;
+            }
+            if(process.exitValue() != 0) {
+                return null;
+            }
+            final String value = StringUtils.strip(new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).strip(), "'\"");
+            return value.isEmpty() ? null : value;
+        }
+        catch(java.io.IOException e) {
+            return null;
+        }
+        catch(InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
     }
 
     /**
@@ -121,14 +164,54 @@ public final class TerminalLauncher {
     }
 
     /**
-     * @return False when no terminal is installed or it could not be started
+     * Start the terminal. A terminal that is gone within two seconds with a failure did not start, and what it said is
+     * the reason.
+     *
+     * @return Null when the terminal started, otherwise what went wrong
      */
-    public static boolean open(final Host host, final Path folder) {
+    public static String open(final Host host, final Path folder) {
         final String terminal = find();
         if(null == terminal) {
-            return false;
+            return Messages.get("No terminal program was found. Install one or set it in the preferences.");
         }
         final List<String> command = command(terminal, host, folder);
-        return new LinuxApplicationLauncher().open(new LinuxApplication(command.get(0), command.get(0)), command.subList(1, command.size()));
+        java.nio.file.Path output = null;
+        try {
+            output = java.nio.file.Files.createTempFile("cyberduck-terminal", ".log");
+            final Process process = new ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")))
+                .start();
+            if(process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS) && process.exitValue() != 0) {
+                final String said = StringUtils.defaultString(new String(java.nio.file.Files.readAllBytes(output), java.nio.charset.StandardCharsets.UTF_8)).strip();
+                return String.format("%s %s", String.format(Messages.get("The terminal {0} did not start.").replace("{0}", "%s"), command.get(0)),
+                    StringUtils.abbreviate(said, 400)).strip();
+            }
+            // Collect the process when it ends so that it does not stay a zombie
+            final Thread reaper = new Thread(() -> {
+                try {
+                    process.waitFor();
+                }
+                catch(InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, "terminal-reaper");
+            reaper.setDaemon(true);
+            reaper.start();
+            return null;
+        }
+        catch(java.io.IOException e) {
+            return String.format("%s %s", String.format(Messages.get("The terminal {0} did not start.").replace("{0}", "%s"), command.get(0)), e.getMessage());
+        }
+        catch(InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+        finally {
+            if(output != null) {
+                output.toFile().deleteOnExit();
+            }
+        }
     }
 }

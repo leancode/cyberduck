@@ -87,4 +87,15 @@ public class LinuxApplicationPreferencesTest {
     public void testDefaultFileInSupportDirectory() {
         assertTrue(LinuxApplicationPreferences.defaultFile().endsWith(".duck/cyberduck.properties"));
     }
+
+    @Test
+    public void testBugsAreReportedToThisRepository() {
+        // The preferences as the program starts them
+        ch.cyberduck.core.preferences.PreferencesFactory.set(new LinuxApplicationPreferences(folder.getRoot().toPath().resolve("cyberduck.properties")));
+        final ch.cyberduck.core.preferences.Preferences preferences = ch.cyberduck.core.preferences.PreferencesFactory.get();
+        assertEquals("https://github.com/leancode/cyberduck-linux/issues/new?body=Version%20{0}", preferences.getProperty("website.bug"));
+        // The text of the link has a place for the version
+        assertEquals("https://github.com/leancode/cyberduck-linux/issues/new?body=Version%209.6.0",
+            java.text.MessageFormat.format(preferences.getProperty("website.bug"), "9.6.0"));
+    }
 }

@@ -18,18 +18,67 @@ package ch.cyberduck.ui.fx;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.LocalFactory;
 import ch.cyberduck.core.Path;
+import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.sftp.SFTPProtocol;
 
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.util.EnumSet;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class TerminalLauncherTest {
+
+    @Rule
+    public TemporaryFolder temporary = new TemporaryFolder();
+
+    @Before
+    public void setup() throws Exception {
+        PreferencesFactory.set(new LinuxApplicationPreferences(temporary.newFolder().toPath().resolve("cyberduck.properties")));
+    }
+
+    private java.io.File script(final String body) throws Exception {
+        final java.io.File file = temporary.newFile();
+        java.nio.file.Files.write(file.toPath(), ("#!/bin/sh\n" + body + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        file.setExecutable(true);
+        return file;
+    }
+
+    @Test
+    public void testStartedTerminalGetsTheCommand() throws Exception {
+        final java.io.File log = temporary.newFile();
+        final java.io.File terminal = script("echo \"$@\" > " + log.getAbsolutePath());
+        PreferencesFactory.get().setProperty(TerminalLauncher.PROPERTY, terminal.getAbsolutePath());
+        assertNull(TerminalLauncher.open(host(), folder));
+        final long deadline = System.currentTimeMillis() + 5000;
+        while(log.length() == 0 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50);
+        }
+        final String given = new String(java.nio.file.Files.readAllBytes(log.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(given, given.startsWith("-e ssh -t -p 2222 alice@example.net"));
+    }
+
+    @Test
+    public void testTerminalThatFailsSaysWhy() throws Exception {
+        final java.io.File terminal = script("echo 'Unknown option -t' >&2; exit 2");
+        PreferencesFactory.get().setProperty(TerminalLauncher.PROPERTY, terminal.getAbsolutePath());
+        final String failure = TerminalLauncher.open(host(), folder);
+        assertTrue(failure, failure.contains("did not start") && failure.contains("Unknown option -t"));
+    }
+
+    @Test
+    public void testTerminalThatIsMissingSaysWhy() {
+        PreferencesFactory.get().setProperty(TerminalLauncher.PROPERTY, "/nonexistent/terminal");
+        final String failure = TerminalLauncher.open(host(), folder);
+        assertTrue(failure, failure.contains("did not start"));
+    }
 
     private final Path folder = new Path("/home/o'brien/data", EnumSet.of(Path.Type.directory));
 
