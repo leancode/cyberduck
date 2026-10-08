@@ -34,7 +34,7 @@ jobs:
           java-version: 25
           cache: maven
       - name: Install libraries for JavaFX and a virtual display
-        run: sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update && sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 install -y --no-install-recommends xvfb libgtk-3-0t64 libgl1 libxtst6 rpm fakeroot desktop-file-utils
+        run: sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update && sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 install -y --no-install-recommends xvfb xdotool libgtk-3-0t64 libgl1 libxtst6 rpm fakeroot desktop-file-utils
       - name: Build the modules the Linux GUI depends on
         run: >-
           mvn --no-transfer-progress --batch-mode install

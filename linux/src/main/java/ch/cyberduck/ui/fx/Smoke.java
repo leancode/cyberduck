@@ -114,6 +114,9 @@ public final class Smoke {
                 case "duplicate":
                     System.out.println(duplicate(browser, arguments.get(1)));
                     return 0;
+                case "dragout":
+                    System.out.println(dragOut(browser, arguments.get(1)));
+                    return 0;
                 case "ftp":
                     System.out.println(ftp(browser, arguments.get(1), arguments.get(2), arguments.get(3), arguments.get(4), arguments.get(5)));
                     return 0;
@@ -1563,5 +1566,93 @@ public final class Smoke {
         awaitAnswering("download", password, counts, () -> transfers.getCompleted() >= completed + 2);
         check("the text file has the line breaks of the server", "line one\r\nline two\r\n".equals(new String(java.nio.file.Files.readAllBytes(down.resolve("text.txt")), java.nio.charset.StandardCharsets.UTF_8)));
         return "SMOKE OK ftp uploaded=2";
+    }
+
+    private static boolean onPath(final String program) {
+        for(String directory : StringUtils.defaultString(System.getenv("PATH")).split(":")) {
+            if(new java.io.File(directory, program).canExecute()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void xdotool(final String... arguments) throws Exception {
+        final List<String> command = new java.util.ArrayList<>();
+        command.add("xdotool");
+        command.addAll(List.of(arguments));
+        final Process process = new ProcessBuilder(command).inheritIO().start();
+        if(!process.waitFor(10, TimeUnit.SECONDS) || process.exitValue() != 0) {
+            throw new IllegalStateException(String.format("Failure running %s", command));
+        }
+    }
+
+    /**
+     * Drag a file and a folder from the listing to another window of the application with the mouse, as a person does it
+     * with the file manager. The other window records what it is given. The files have to be there, complete, when the
+     * transfer is done.
+     *
+     * @param directory Folder with f.txt ("dragged content") and the folder d with inner.txt
+     */
+    private static String dragOut(final BrowserController browser, final String directory) throws Exception {
+        if(!onPath("xdotool")) {
+            return "SMOKE SKIP dragout, xdotool is not installed";
+        }
+        mount(browser, directory);
+        final java.util.concurrent.atomic.AtomicReference<List<java.io.File>> dropped = new java.util.concurrent.atomic.AtomicReference<>();
+        final javafx.stage.Stage target = onFx(() -> {
+            final javafx.stage.Stage stage = new javafx.stage.Stage();
+            final javafx.scene.layout.StackPane pane = new javafx.scene.layout.StackPane(new javafx.scene.control.Label("Drop here"));
+            pane.setOnDragOver(event -> {
+                if(event.getDragboard().hasFiles()) {
+                    event.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
+                }
+                event.consume();
+            });
+            pane.setOnDragDropped(event -> {
+                dropped.set(new java.util.ArrayList<>(event.getDragboard().getFiles()));
+                event.setDropCompleted(true);
+                event.consume();
+            });
+            stage.setScene(new javafx.scene.Scene(pane, 320, 160));
+            stage.setX(250);
+            stage.setY(720);
+            stage.show();
+            return stage;
+        });
+        await("rows", () -> onFx(() -> null != row(browser, "f.txt") && null != row(browser, "d")));
+        final StringBuilder result = new StringBuilder("SMOKE OK dragout");
+        for(String name : List.of("f.txt", "d")) {
+            dropped.set(null);
+            final double[] from = onFx(() -> {
+                final javafx.geometry.Bounds b = row(browser, name).localToScreen(row(browser, name).getBoundsInLocal());
+                return new double[]{b.getMinX() + 60, b.getMinY() + b.getHeight() / 2};
+            });
+            final double[] to = onFx(() -> {
+                final javafx.geometry.Bounds b = target.getScene().getRoot().localToScreen(target.getScene().getRoot().getBoundsInLocal());
+                return new double[]{b.getMinX() + b.getWidth() / 2, b.getMinY() + b.getHeight() / 2};
+            });
+            xdotool("mousemove", String.valueOf((int) from[0]), String.valueOf((int) from[1]));
+            xdotool("mousedown", "1");
+            TimeUnit.MILLISECONDS.sleep(300);
+            for(int step = 1; step <= 20; step++) {
+                xdotool("mousemove", String.valueOf((int) (from[0] + (to[0] - from[0]) * step / 20)), String.valueOf((int) (from[1] + (to[1] - from[1]) * step / 20)));
+                TimeUnit.MILLISECONDS.sleep(50);
+            }
+            xdotool("mouseup", "1");
+            await(String.format("%s dropped", name), () -> null != dropped.get());
+            final java.io.File file = dropped.get().get(0);
+            check(String.format("the other window got %s as a file called %s", file, name), dropped.get().size() == 1 && file.getName().equals(name));
+            // It is downloaded while it is on its way. It is there when it is complete.
+            final java.nio.file.Path expected = "d".equals(name) ? file.toPath().resolve("inner.txt") : file.toPath();
+            await(String.format("%s downloaded", name), () -> java.nio.file.Files.isRegularFile(expected));
+            check("with the content of the server", ("d".equals(name) ? "inner content" : "dragged content").equals(content(expected)));
+            result.append(String.format(" %s=ok", name));
+        }
+        onFx(() -> {
+            target.close();
+            return null;
+        });
+        return result.toString();
     }
 }
