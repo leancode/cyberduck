@@ -92,4 +92,12 @@ public class MessagesTest {
         assertEquals("pt_BR", Bootstrap.language("pt_BR", installed));
         assertNull(Bootstrap.language("xx:yy", installed));
     }
+
+    @Test
+    public void testLocalDiskIsNotNamedAfterTheComputerAlone() {
+        locale.setDefault("en");
+        final ch.cyberduck.core.nio.LocalProtocol local = new ch.cyberduck.core.nio.LocalProtocol();
+        assertEquals(String.format("Local Disk (%s)", local.getName()), Messages.protocol(local));
+        assertEquals(new ch.cyberduck.core.sftp.SFTPProtocol().getDescription(), Messages.protocol(new ch.cyberduck.core.sftp.SFTPProtocol()));
+    }
 }

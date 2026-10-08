@@ -210,7 +210,7 @@ public final class PreferencesController {
         @Override
         protected void updateItem(final Protocol item, final boolean empty) {
             super.updateItem(item, empty);
-            setText(empty || null == item ? null : item.getDescription());
+            setText(empty || null == item ? null : Messages.protocol(item));
         }
     }
 

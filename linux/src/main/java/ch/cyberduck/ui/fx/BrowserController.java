@@ -107,6 +107,7 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.KeyCode;
@@ -148,8 +149,8 @@ public class BrowserController extends FxController {
     private final Label status = new Label();
     private final ToggleButton bookmarksToggle = new ToggleButton(Messages.get("Bookmarks"));
     private final Button connect = new Button(Messages.get("Connect"));
-    private final Button back = new Button(Messages.get("Back"));
-    private final Button up = new Button(Messages.get("Up"));
+    private final Button back = new Button();
+    private final Button up = new Button();
     private final Button refresh = new Button(Messages.get("Refresh"));
     private final Button download = new Button(Messages.get("Download"));
     private final Button upload = new Button(Messages.get("Upload"));
@@ -234,6 +235,12 @@ public class BrowserController extends FxController {
         for(Region button : new Region[]{bookmarksToggle, connect, back, up, refresh, download, upload, newFolder, rename, delete, transfers}) {
             button.setMinWidth(Region.USE_PREF_SIZE);
         }
+        back.setGraphic(Icons.back());
+        back.setTooltip(new Tooltip(Messages.get("Back")));
+        back.setAccessibleText(Messages.get("Back"));
+        up.setGraphic(Icons.up());
+        up.setTooltip(new Tooltip(Messages.get("Enclosing Folder")));
+        up.setAccessibleText(Messages.get("Enclosing Folder"));
         location.setPrefWidth(160);
         location.setMinWidth(80);
         stage.setOnShown(event -> stage.setMinWidth(Math.min(

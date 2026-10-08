@@ -16,6 +16,8 @@ package ch.cyberduck.ui.fx;
  */
 
 import ch.cyberduck.core.LocaleFactory;
+import ch.cyberduck.core.Protocol;
+import ch.cyberduck.core.Scheme;
 
 /**
  * Translated labels. The English text is the key, as in the translations shared with the other platforms. The
@@ -31,6 +33,17 @@ public final class Messages {
 
     private Messages() {
         //
+    }
+
+    /**
+     * The name of a protocol in a list. The local disk is named after the computer, because that is what the macOS
+     * application shows, so say what it is.
+     */
+    public static String protocol(final Protocol protocol) {
+        if(Scheme.file == protocol.getScheme()) {
+            return String.format("%s (%s)", get("Local Disk"), protocol.getName());
+        }
+        return protocol.getDescription();
     }
 
     /**
