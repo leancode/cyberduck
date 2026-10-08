@@ -1,13 +1,18 @@
 name: Linux Release
 # Builds the packages of the Linux GUI for both architectures and attaches them to a GitHub release.
-# Start it by pushing a tag such as v9.6.0-linux.1. Started by hand it builds and tests the packages and keeps
-# them as artifacts of the run, without a release.
+# - After every successful run of "Linux GUI" on main: a release of that commit, marked as the latest release.
+# - A pushed tag such as v9.6.0-linux.1: a pre-release of the commit of the tag.
+# - Started by hand: builds and tests the packages and keeps them as artifacts of the run, without a release.
 on:
+  workflow_run:
+    workflows: [ 'Linux GUI' ]
+    types: [ completed ]
+    branches: [ main ]
   push:
     tags: [ 'v*-linux.*' ]
   workflow_dispatch:
 
-# One release at a time
+# One at a time, in the order of the pushes
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -15,9 +20,17 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # The commit that is built: for a finished run of "Linux GUI" the commit of that run
+  SOURCE: ${{ github.event.workflow_run.head_sha || github.sha }}
+  # A run of a pull request from another repository is not built
+  WANTED: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository) }}
+
 jobs:
   check:
     name: The commit passed the tests
+    # A run of Linux GUI that failed makes no release, and no run of this workflow either
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -25,16 +38,26 @@ jobs:
       contents: read
     steps:
       - name: Require a green Linux GUI run for this commit
+        id: check
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          passed="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow linux-gui.yml --commit "$GITHUB_SHA" --status success --json databaseId --jq length)"
-          echo "Successful Linux GUI runs for $GITHUB_SHA: $passed"
+          if [ "$WANTED" != "true" ]; then
+            echo "Nothing to build for this event"
+            echo "wanted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          passed="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow linux-gui.yml --commit "$SOURCE" --status success --json databaseId --jq length)"
+          echo "Successful Linux GUI runs for $SOURCE: $passed"
           test "$passed" -ge 1
+          echo "wanted=true" >> "$GITHUB_OUTPUT"
+    outputs:
+      wanted: ${{ steps.check.outputs.wanted }}
 
   build:
     name: Build for ${{ matrix.arch }}
     needs: check
+    if: needs.check.outputs.wanted == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ env.SOURCE }}
           # The build number is the number of commits
           fetch-depth: 0
       - name: Set up JDK 25
@@ -88,7 +112,7 @@ jobs:
   release:
     name: Publish the release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -105,10 +129,27 @@ jobs:
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
+          # The version is in the name of the package, for example cyberduck_9.6.0.4321_amd64.deb
+          version="$(ls packages/cyberduck_*_amd64.deb | sed -E 's/.*cyberduck_(.*)_amd64\.deb/\1/')"
+          if [ "$EVENT" = "workflow_run" ]; then
+            tag="linux-v$version"
+            title="Cyberduck for Linux $version"
+            flags="--latest"
+          else
+            tag="$REF_NAME"
+            title="Cyberduck for Linux $REF_NAME"
+            flags="--prerelease --verify-tag"
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "The release $tag exists already"
+            exit 0
+          fi
           cat > notes.md <<NOTES
           Community build of Cyberduck for Linux. It is not an official release of iterate GmbH.
+          Built from commit $SOURCE.
 
           - Debian and Ubuntu 24.04: \`sudo apt install ./cyberduck_*_amd64.deb\` (or \`arm64\`)
           - Fedora and other RPM based systems: \`sudo dnf install ./cyberduck-*.rpm\`
@@ -116,5 +157,5 @@ jobs:
 
           The changes since the last release are listed below.
           NOTES
-          gh release create "$TAG" packages/* --repo "$GITHUB_REPOSITORY" --title "Cyberduck for Linux $TAG" \
-            --prerelease --generate-notes --notes-file notes.md --verify-tag
+          gh release create "$tag" packages/* --repo "$GITHUB_REPOSITORY" --target "$SOURCE" --title "$title" \
+            $flags --generate-notes --notes-file notes.md

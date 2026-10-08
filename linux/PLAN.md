@@ -1487,6 +1487,11 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   - [x] `release` (tags only): writes `SHA256SUMS` and creates a pre-release on GitHub with the packages, a text that says it is a community build, and the generated list of changes.
   - [x] Started by hand (`workflow_dispatch`) it builds and tests without a release. The dry run passed on x64 and arm64 on 2026-10-08 (https://github.com/leancode/cyberduck-linux/actions/runs/37768672122), including the install of the deb and the start of the application on both. The `release` job has not run yet, it needs a tag.
 
+- [x] **7.2b Release after every push to `main`** (decided 2026-10-08)
+
+  The workflow `linux-release.yml` starts when a run of `Linux GUI` on `main` ends well, builds that commit for x64 and arm64 and creates a release `linux-v<version>` (the version is the one in the name of the package, the build number is the number of commits), marked as the latest release, with the deb, the rpm and `SHA256SUMS`. A tag `v*-linux.*` still makes a pre-release for a named version. A run that failed makes no release. A release that exists is not made twice. Releases are not removed by the workflow; if the list gets long, old ones can be deleted by hand or a rule added.
+  - [ ] The first release made by the workflow.
+
 - [ ] **7.2 First release**
 
   After the Yes items of 6.12 are done and tested again on a desktop: a pre-release tag such as `v9.6.0-linux.1` (upstream version plus the Linux build). It is the first real run of the release workflow (4.6). Until upstream agrees on the name, the packages are described as a community build, "Cyberduck for Linux (unofficial)", because "Cyberduck" is a trademark of iterate GmbH.
