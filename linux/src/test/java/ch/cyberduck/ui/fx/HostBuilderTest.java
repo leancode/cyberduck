@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
 
 public class HostBuilderTest {
@@ -167,5 +168,17 @@ public class HostBuilderTest {
         HostBuilder.copy(new Host(ftp, "example.net"), stored);
         assertEquals(null, stored.getProperty(ch.cyberduck.core.ftp.FTPFileType.MODE));
         assertEquals(ch.cyberduck.core.ftp.FTPConnectMode.unknown, stored.getFTPConnectMode());
+    }
+
+    @Test
+    public void testPrivateKeyIsStoredAndRemoved() throws Exception {
+        final Host host = HostBuilder.fromFields(factory, sftp, "example.net", "", "user", "", "");
+        HostBuilder.identity(host, " /home/user/.ssh/id_ed25519 ");
+        assertEquals("/home/user/.ssh/id_ed25519", host.getCredentials().getIdentity().getAbsolute());
+        final Host copy = HostBuilder.fromFields(factory, sftp, "example.net", "", "user", "", "");
+        HostBuilder.copy(host, copy);
+        assertEquals("/home/user/.ssh/id_ed25519", copy.getCredentials().getIdentity().getAbsolute());
+        HostBuilder.identity(host, "");
+        assertNull(host.getCredentials().getIdentity());
     }
 }

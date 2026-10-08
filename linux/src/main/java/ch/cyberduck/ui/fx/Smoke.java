@@ -164,6 +164,9 @@ public final class Smoke {
                     System.out.println("SMOKE OK sftp");
                     hold();
                     return 0;
+                case "sshkey":
+                    System.out.printf("SMOKE OK sshkey %s%n", sshkey(browser, arguments.get(1), arguments.get(2), arguments.get(3), arguments.get(4)));
+                    return 0;
                 case "windows":
                     windows(browser, arguments.get(1), arguments.get(2));
                     System.out.println("SMOKE OK windows");
@@ -474,6 +477,37 @@ public final class Smoke {
     }
 
     /**
+     * Log in to an SFTP server with a private key chosen in the connection dialog. No password may be asked.
+     *
+     * @return Summary of the dialogs answered
+     */
+    private static String sshkey(final BrowserController browser, final String host, final String port, final String user, final String key) throws Exception {
+        final java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
+        onFx(() -> {
+            Platform.runLater(browser::connect);
+            return null;
+        });
+        await("connection dialog", () -> onFx(() -> null != browser.getConnectionDialog() && browser.getConnectionDialog().isShowing()));
+        onFx(() -> {
+            final ConnectionDialog dialog = browser.getConnectionDialog();
+            dialog.getProtocolBox().setValue(ProtocolFactory.get().forName("sftp"));
+            check("key field shown for SFTP", dialog.getPrivateKeyField().isVisible() && dialog.getChooseKeyButton().isVisible());
+            dialog.getServerField().setText(host);
+            dialog.getPortField().setText(port);
+            dialog.getUsernameField().setText(user);
+            dialog.getPrivateKeyField().setText(key);
+            dialog.getConnectButton().fire();
+            return null;
+        });
+        awaitAnswering("login with the key", "", counts, () -> onFx(() -> null != browser.getRendered()));
+        check("no password was asked", 0 == counts.getOrDefault("password", 0));
+        check("the folder of the account is listed", names(browser).contains("upload"));
+        menu(browser, "Disconnect");
+        await("disconnected", () -> onFx(() -> !browser.isMounted()));
+        return counts.toString();
+    }
+
+    /**
      * The checklist of the usable minimum against a real SFTP server: add a bookmark, connect with host key and password
      * prompts, browse, upload, download, rename, create and delete, disconnect and connect again.
      *
@@ -609,11 +643,28 @@ public final class Smoke {
         check("known host key is not asked again", hostkeys == counts.getOrDefault("hostkey", 0));
         menu(browser, "Disconnect");
         await("disconnected again", () -> onFx(() -> !browser.isMounted()));
+
+        // Quick Connect takes a URL without a password and asks for it like any other connection
+        onFx(() -> {
+            browser.getQuick().setText(String.format("sftp://%s@%s:%s/upload", user, host, port));
+            browser.getQuick().fireEvent(new ActionEvent());
+            return null;
+        });
+        awaitAnswering("quick connect", password, counts, () -> onFx(() -> null != browser.getRendered()));
+        check("quick connect shows the folder of the URL", onFx(() -> "/upload".equals(browser.getRendered().getAbsolute())));
+        check("quick connect clears the field", onFx(() -> browser.getQuick().getText().isEmpty()));
+        menu(browser, "Disconnect");
+        await("disconnected after quick connect", () -> onFx(() -> !browser.isMounted()));
     }
 
     private static void menu(final BrowserController browser, final String name) throws Exception {
+        menu(browser, "File", name);
+    }
+
+    private static void menu(final BrowserController browser, final String menu, final String name) throws Exception {
         onFx(() -> {
-            browser.getMenuBar().getMenus().get(0).getItems().stream().filter(i -> name.equals(i.getText())).findFirst().orElseThrow().fire();
+            browser.getMenuBar().getMenus().stream().filter(m -> menu.equals(m.getText())).findFirst().orElseThrow()
+                .getItems().stream().filter(i -> name.equals(i.getText())).findFirst().orElseThrow().fire();
             return null;
         });
     }
@@ -971,6 +1022,54 @@ public final class Smoke {
             return null;
         });
         awaitRendered(browser, directory);
+        // Forward returns to the directory that back left, and back returns again
+        check("forward is enabled after back", !onFx(() -> browser.getForwardButton().isDisabled()));
+        onFx(() -> {
+            browser.getForwardButton().fire();
+            return null;
+        });
+        awaitRendered(browser, directory + "/a/b");
+        onFx(() -> {
+            browser.getBackButton().fire();
+            return null;
+        });
+        awaitRendered(browser, directory);
+        // The search field shows the files with the text in the name
+        check("all files shown", names(browser).containsAll(List.of("a", "alpha.txt", "beta.txt")));
+        onFx(() -> {
+            browser.getSearch().setText("ALP");
+            return null;
+        });
+        check("search shows only alpha.txt", List.of("alpha.txt").equals(names(browser)));
+        check("status counts the search", onFx(() -> browser.getStatusText().contains("1 of ")));
+        onFx(() -> {
+            browser.getSearch().setText("");
+            return null;
+        });
+        check("search cleared", names(browser).contains("beta.txt"));
+        // Hidden files are shown with the View menu and hidden again with the same item
+        check("hidden file not shown", !names(browser).contains(".hidden"));
+        menu(browser, "View", "Show Hidden Files");
+        await("hidden file shown", () -> names(browser).contains(".hidden"));
+        menu(browser, "View", "Show Hidden Files");
+        await("hidden file hidden again", () -> !names(browser).contains(".hidden"));
+        // Backspace goes to the parent folder
+        doubleClick(browser, "a");
+        awaitRendered(browser, directory + "/a");
+        onFx(() -> {
+            browser.getTable().fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED, "", "",
+                javafx.scene.input.KeyCode.BACK_SPACE, false, false, false, false));
+            return null;
+        });
+        awaitRendered(browser, directory);
+        // The About window names the program
+        onFx(() -> {
+            Platform.runLater(browser::about);
+            return null;
+        });
+        await("about window", () -> onFx(() -> null != dialog()));
+        check("about names the program", onFx(() -> dialog().getHeaderText().startsWith("Cyberduck")));
+        closeDialog();
         // A directory that cannot be listed leaves the previous one in place
         onFx(() -> {
             browser.getLocation().setText(directory + "/missing");

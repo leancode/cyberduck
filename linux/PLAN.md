@@ -1408,10 +1408,21 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   Quick Connect field, a path pop-up and a lock for the connection; the info window of the existing applications has tabs; the existing preferences are a window of panes
   with many more settings (E); the Linux window title and the Window menu are simpler.
 
-- [ ] **6.13 Decide and build**
+- [x] **6.13 Decide and build**
 
-  Go through 6.12, strike what Linux does not need, and give each remaining row its own step 6.14 and on, in the same form as the steps
-  above (request, done, proof). Nothing of 6.12 is built yet.
+  Decision of the owner (2026-10-08): do the rows marked **Yes** in 6.12. The rest waits. The Yes rows are built in three batches, one step each.
+
+- [ ] **6.14 Yes batch 1: logging in, moving around, help** (A1, A3, B1, B3, B6, B14, F1, F2)
+
+  Done, proved by 111 unit tests; the smoke scenarios `navigate`, `sftp` and `sshkey` run on CI:
+  - [x] SSH private key: a field with a Choose button in the connection and bookmark dialogs for protocols that take a key (SFTP). Stored in the bookmark, kept by Edit and Duplicate. Smoke `sshkey` logs in to an SFTP container with a generated key and requires that no password is asked.
+  - [x] Quick Connect field in the toolbar and in the File menu (Ctrl+K): a URL, or a server name with the default protocol. Smoke `sftp` ends with a connection by URL.
+  - [x] Forward button and Go menu (Back Alt+Left, Forward Alt+Right, Enclosing Folder Alt+Up, Go to Folder Ctrl+L).
+  - [x] Search field in the toolbar (Ctrl+F) that filters the listing by name; the status line counts "1 of 5 items".
+  - [x] View menu: Show Hidden Files (Ctrl+Shift+.) and Refresh (Ctrl+R).
+  - [x] Keys in the listing: Delete, F2 (rename), Backspace (parent folder).
+  - [x] Help menu: Help, Report a Bug, License, Acknowledgments, Privacy Policy, About with the version.
+  - [ ] Result of the CI run on the pushed commit.
 
 ---
 

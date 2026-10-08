@@ -85,6 +85,7 @@ echo "newer" > "$work/sync-local/both.txt"
 HOME="$work/home-vault" smoke '^SMOKE OK sync remote=3 local=3$' sync "$work/sync-remote" "$work/sync-local"
 
 mkdir -p "$work/nav/a/b" && echo hello > "$work/nav/a/b/file.txt"
+echo one > "$work/nav/alpha.txt"; echo two > "$work/nav/beta.txt"; echo secret > "$work/nav/.hidden"
 smoke '^SMOKE OK navigate$' navigate "$work/nav"
 
 smoke '^SMOKE OK connect 3$' connect "$work/list"
@@ -180,6 +181,20 @@ if docker info >/dev/null 2>&1; then
     done
     mkdir -p "$work/sftp"
     smoke '^SMOKE OK sftp$' sftp 127.0.0.1 "$sftp_port" foo pass "$work/sftp"
+    # Log in with a private key instead of a password. The container takes the public key from its keys folder.
+    if command -v ssh-keygen >/dev/null 2>&1; then
+        mkdir -p "$work/keys" && ssh-keygen -q -t ed25519 -N "" -f "$work/keys/id_ed25519" >/dev/null
+        key_container="$(docker run -d --rm -p 127.0.0.1::22 -v "$work/keys/id_ed25519.pub:/home/foo/.ssh/keys/id_ed25519.pub:ro" "$image" foo::::upload)" || fail "sshkey: could not start $image"
+        key_port="$(docker port "$key_container" 22/tcp | head -1 | sed 's/.*://')"
+        for _ in $(seq 1 50); do
+            timeout 3 bash -c "exec 3<>/dev/tcp/127.0.0.1/$key_port; read -t 2 line <&3; [[ \$line == SSH-* ]]" 2>/dev/null && break
+            sleep 0.5
+        done
+        smoke '^SMOKE OK sshkey ' sshkey 127.0.0.1 "$key_port" foo "$work/keys/id_ed25519"
+        docker stop "$key_container" >/dev/null 2>&1
+    else
+        echo "skip sshkey (ssh-keygen is not installed)"
+    fi
     # FTP with a bookmark that sends text as ASCII and the rest as binary. The data connection of the server is on fixed
     # ports, because the server tells them to the client.
     ftp_image="${CYBERDUCK_SMOKE_FTP_IMAGE:-delfer/alpine-ftp-server}"

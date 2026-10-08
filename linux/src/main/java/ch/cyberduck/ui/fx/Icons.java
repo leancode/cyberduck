@@ -44,6 +44,13 @@ public final class Icons {
     }
 
     /**
+     * Triangle that points to the right, for going forward
+     */
+    public static Node forward() {
+        return shape("M 0 0 L 9 7 L 0 14 Z", 9, 14);
+    }
+
+    /**
      * Triangle that points up, for going to the parent folder
      */
     public static Node up() {
