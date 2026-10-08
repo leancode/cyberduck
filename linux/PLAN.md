@@ -1422,7 +1422,22 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   - [x] View menu: Show Hidden Files (Ctrl+Shift+.) and Refresh (Ctrl+R).
   - [x] Keys in the listing: Delete, F2 (rename), Backspace (parent folder).
   - [x] Help menu: Help, Report a Bug, License, Acknowledgments, Privacy Policy, About with the version.
-  - [ ] Result of the CI run on the pushed commit.
+  - [x] CI run 20 failed in the existing `vault` scenario, not in the new code: after unlocking a vault the browser reloads the folder, and a double click made in that moment is replaced by the reload. The scenario now repeats the click (`openFolder`). The scenario passes locally with the new code.
+  - [ ] Result of the CI run with the fix, and the `sshkey` scenario, which needs Docker and has only run on CI.
+
+- [x] **6.15 Yes batch 2: files and folders** (C1, C3, C4, C8, C10, B7, B12, B13)
+
+  Done, proved by 118 unit tests and by the scenario `files` (real windows, local folder; it also ran locally):
+  - [x] New File (File menu Ctrl+Alt+N, context menu): asks for a name, makes an empty file, selects it. A name that exists is refused.
+  - [x] Download To… (a folder) and Download As… (one file, with a name) in the File menu and the context menu.
+  - [x] Copy URL (Edit menu Ctrl+Shift+C, context menu): the address of the selected files on the clipboard, one per line. Open in Web Browser (File menu) when the server has a web address, otherwise a message.
+  - [x] Open in Terminal (File menu Ctrl+Alt+T, context menus, only for SFTP): ssh with the port, the key file and the folder, in the terminal that is installed (`x-terminal-emulator`, gnome-terminal, konsole, xfce4-terminal, mate-terminal, tilix, kitty, alacritty, foot, xterm) or the one in the preference `linux.terminal`. The command is covered by unit tests (`TerminalLauncherTest`); the scenario `sshkey` starts a script in place of the terminal and checks what it was given.
+  - [x] Folder size: the info window of a folder has a Calculate button that adds up everything in it (`files` checks 15 bytes for two files of 10 and 5).
+  - [x] Cut, Copy and Paste (Edit menu Ctrl+X, Ctrl+C, Ctrl+V and context menus) within one connection, also from one window to another. A copy next to the original gets the name "name copy" and then "name copy 2". Pasting into another connection is refused with a message (not built).
+  - [x] Drag files onto a folder of the listing to move them (real mouse in the scenario `files`). Files that are dragged out of the window are downloaded from the moment they leave it, not when the drag starts; the scenario `dragout` still passes.
+  - [x] Icons in the file name column: a folder, and a file tinted by kind (pictures, sound and video, archives, programs and text).
+  - [x] Select All (Ctrl+A) in the Edit menu.
+  - [ ] Result of the CI run.
 
 ---
 

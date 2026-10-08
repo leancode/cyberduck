@@ -31,6 +31,7 @@ import ch.cyberduck.core.formatter.SizeFormatterFactory;
 import ch.cyberduck.core.pool.SessionPool;
 import ch.cyberduck.core.threading.WorkerBackgroundAction;
 import ch.cyberduck.core.worker.AttributesWorker;
+import ch.cyberduck.core.worker.CalculateSizeWorker;
 import ch.cyberduck.core.worker.Worker;
 import ch.cyberduck.core.worker.WritePermissionWorker;
 
@@ -42,6 +43,7 @@ import java.text.MessageFormat;
 import java.util.Collections;
 import java.util.EnumSet;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -70,6 +72,11 @@ public final class InfoController {
 
     private Stage stage;
     private long bytes = -1;
+    /**
+     * Size of the content of a folder once it has been calculated, otherwise -1
+     */
+    private long calculated = -1;
+    private final Button calculate = new Button(Messages.get("Calculate"));
 
     private final Label name = new Label();
     private final Label kind = new Label();
@@ -140,7 +147,12 @@ public final class InfoController {
         grid.addRow(row++, new Label(Messages.get("Name")), name);
         grid.addRow(row++, new Label(Messages.get("Kind")), kind);
         grid.addRow(row++, new Label(Messages.get("Where")), where);
-        grid.addRow(row++, new Label(Messages.get("Size")), size);
+        calculate.setVisible(file.isDirectory());
+        calculate.setManaged(file.isDirectory());
+        calculate.setOnAction(event -> this.calculate());
+        final HBox sizes = new HBox(10, size, calculate);
+        sizes.setAlignment(Pos.CENTER_LEFT);
+        grid.addRow(row++, new Label(Messages.get("Size")), sizes);
         grid.addRow(row++, new Label(Messages.get("Modified")), modified);
         grid.addRow(row++, new Label(Messages.get("Permissions")), permissions);
         grid.add(this.editor(), 1, row++);
@@ -264,7 +276,7 @@ public final class InfoController {
         name.setText(file.getName());
         kind.setText(Messages.get(file.isDirectory() ? "Folder" : "File"));
         where.setText(file.getParent().getAbsolute());
-        bytes = file.isDirectory() ? -1 : attributes.getSize();
+        bytes = file.isDirectory() ? calculated : attributes.getSize();
         if(bytes < 0) {
             size.setText(StringUtils.EMPTY);
         }
@@ -282,6 +294,34 @@ public final class InfoController {
         }
         owner.setText(StringUtils.defaultString(attributes.getOwner()));
         group.setText(StringUtils.defaultString(attributes.getGroup()));
+    }
+
+    /**
+     * Add up the size of everything in the folder, which can take a while on a big folder
+     */
+    void calculate() {
+        calculate.setDisable(true);
+        size.setText(Messages.get("Calculating…"));
+        controller.background(new WorkerBackgroundAction<>(controller, pool, new CalculateSizeWorker(Collections.singletonList(file), controller) {
+            @Override
+            public void update(final long running) {
+                Platform.runLater(() -> size.setText(String.format("%s …", SizeFormatterFactory.get().format(running))));
+            }
+
+            @Override
+            public void cleanup(final Long total) {
+                super.cleanup(total);
+                calculate.setDisable(false);
+                if(total != null) {
+                    calculated = total;
+                }
+                InfoController.this.update(file.attributes());
+            }
+        }));
+    }
+
+    Button getCalculate() {
+        return calculate;
     }
 
     Stage getStage() {
@@ -326,7 +366,7 @@ public final class InfoController {
     /**
      * The URL needs the session, because the address of a file depends on the protocol and the connection
      */
-    private static class UrlWorker extends Worker<DescriptiveUrlBag> {
+    static class UrlWorker extends Worker<DescriptiveUrlBag> {
         private final Path file;
 
         UrlWorker(final Path file) {

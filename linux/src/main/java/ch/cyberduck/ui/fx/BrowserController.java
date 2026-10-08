@@ -18,6 +18,8 @@ package ch.cyberduck.ui.fx;
 import ch.cyberduck.core.AttributedList;
 import ch.cyberduck.core.BookmarkNameProvider;
 import ch.cyberduck.core.Cache;
+import ch.cyberduck.core.DescriptiveUrl;
+import ch.cyberduck.core.DescriptiveUrlBag;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.ListProgressListener;
 import ch.cyberduck.core.Local;
@@ -63,6 +65,7 @@ import ch.cyberduck.core.worker.CreateDirectoryWorker;
 import ch.cyberduck.core.worker.DeleteWorker;
 import ch.cyberduck.core.worker.ListWorker;
 import ch.cyberduck.core.worker.CopyWorker;
+import ch.cyberduck.core.worker.TouchWorker;
 import ch.cyberduck.core.transfer.SyncTransfer;
 import ch.cyberduck.core.worker.MoveWorker;
 import ch.cyberduck.core.worker.MountWorker;
@@ -87,6 +90,7 @@ import java.io.IOException;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.Collections;
@@ -227,6 +231,8 @@ public class BrowserController extends FxController {
         this.stage = stage;
         this.stage.setTitle(preferences.getProperty("application.name"));
         this.stage.setScene(new Scene(this.build(), 900, 600));
+        // Files that are dragged out of the window are downloaded from the moment they leave it
+        this.stage.getScene().setOnDragExited(event -> this.startPendingDrag());
     }
 
     private BorderPane build() {
@@ -308,14 +314,18 @@ public class BrowserController extends FxController {
             // The files that are dragged out are downloaded while they are on their way
             row.setOnDragDetected(event -> this.dragOut(event, row));
             // Files dropped on a folder go into the folder
-            row.setOnDragOver(event -> this.acceptDrag(event));
+            row.setOnDragOver(event -> this.acceptDrag(event, !row.isEmpty() && row.getItem().isDirectory() ? row.getItem() : null));
             row.setOnDragDropped(event -> this.drop(event, !row.isEmpty() && row.getItem().isDirectory() ? row.getItem() : null));
+            row.setOnDragDone(event -> {
+                pendingDrag = null;
+                dragged = null;
+            });
             return row;
         });
         // The empty area of the listing offers what can be done in the folder that is shown
         table.setOnContextMenuRequested(event -> this.showMenu(emptyMenu, null, event));
         // Files dropped anywhere else go into the folder that is shown
-        table.setOnDragOver(event -> this.acceptDrag(event));
+        table.setOnDragOver(event -> this.acceptDrag(event, null));
         table.setOnDragDropped(event -> this.drop(event, null));
         table.setOnKeyPressed(event -> {
             switch(event.getCode()) {
@@ -347,7 +357,7 @@ public class BrowserController extends FxController {
         table.getColumns().add(this.column("Filename", 360, new FilenameComparator(true), p -> {
             final String name = p.getName();
             return p.isDirectory() ? String.format("%s%s", name, Path.DELIMITER) : name;
-        }, Pos.CENTER_LEFT));
+        }, Pos.CENTER_LEFT, p -> p.isDirectory() ? Icons.folder() : Icons.file(p.getName())));
         table.getColumns().add(this.column("Size", 90, new SizeComparator(true), p -> {
             if(p.isDirectory() || p.attributes().getSize() < 0) {
                 return StringUtils.EMPTY;
@@ -386,6 +396,11 @@ public class BrowserController extends FxController {
 
     private TableColumn<Path, Path> column(final String title, final double width, final Comparator<Path> comparator,
                                            final Function<Path, String> text, final Pos alignment) {
+        return this.column(title, width, comparator, text, alignment, null);
+    }
+
+    private TableColumn<Path, Path> column(final String title, final double width, final Comparator<Path> comparator,
+                                           final Function<Path, String> text, final Pos alignment, final Function<Path, javafx.scene.Node> icon) {
         final TableColumn<Path, Path> column = new TableColumn<>(Messages.get(title));
         column.setPrefWidth(width);
         column.setComparator(comparator);
@@ -396,6 +411,7 @@ public class BrowserController extends FxController {
                 super.updateItem(item, empty);
                 setAlignment(alignment);
                 setText(empty || null == item ? null : text.apply(item));
+                setGraphic(empty || null == item || null == icon ? null : icon.apply(item));
             }
         });
         return column;
@@ -409,6 +425,9 @@ public class BrowserController extends FxController {
     private MenuItem openRow;
     private MenuItem editRow;
     private MenuItem compareRow;
+    private MenuItem downloadAsRow;
+    private MenuItem terminalRow;
+    private MenuItem emptyTerminal;
 
     private MenuItem item(final String text, final Runnable action) {
         final MenuItem item = new MenuItem(text);
@@ -431,11 +450,18 @@ public class BrowserController extends FxController {
         rowMenu.getItems().setAll(
             openRow,
             this.item(Messages.get("Download"), this::download),
+            this.item(Messages.get("Download To…"), this::downloadTo),
+            downloadAsRow = this.item(Messages.get("Download As…"), this::downloadAs),
             editRow = this.item(Messages.get("Edit"), this::edit),
             compareRow = this.item(Messages.get("Compare") + "…", this::compare),
             editWithRow,
             new SeparatorMenuItem(),
             this.item(Messages.get("Get Info"), this::info),
+            this.item(Messages.get("Copy URL"), this::copyUrl),
+            new SeparatorMenuItem(),
+            this.item(Messages.get("Cut"), this::cutFiles),
+            this.item(Messages.get("Copy"), this::copyFiles),
+            this.item(Messages.get("Paste"), this::paste),
             new SeparatorMenuItem(),
             this.item(Messages.get("Rename"), this::rename),
             this.item(Messages.get("Duplicate File") + "…", this::duplicate),
@@ -445,11 +471,16 @@ public class BrowserController extends FxController {
             this.item(Messages.get("Synchronize") + "…", this::synchronize),
             new SeparatorMenuItem(),
             this.item(Messages.get("New Folder"), this::newFolder),
+            this.item(Messages.get("New File"), this::newFile),
             this.item(Messages.get("Upload") + "…", this::upload),
+            terminalRow = this.item(Messages.get("Open in Terminal"), this::openTerminal),
             this.item(Messages.get("Refresh"), this::reload));
         emptyMenu.getItems().setAll(
             this.item(Messages.get("Upload") + "…", this::upload),
             this.item(Messages.get("New Folder"), this::newFolder),
+            this.item(Messages.get("New File"), this::newFile),
+            this.item(Messages.get("Paste"), this::paste),
+            emptyTerminal = this.item(Messages.get("Open in Terminal"), this::openTerminal),
             new SeparatorMenuItem(),
             this.item(Messages.get("Refresh"), this::reload),
             this.item(Messages.get("Synchronize") + "…", this::synchronize),
@@ -461,7 +492,11 @@ public class BrowserController extends FxController {
         if(!this.isMounted()) {
             return;
         }
+        final boolean terminal = TerminalLauncher.isSupported(pool.getHost());
+        terminalRow.setVisible(terminal);
+        emptyTerminal.setVisible(terminal);
         if(selected != null) {
+            downloadAsRow.setVisible(table.getSelectionModel().getSelectedItems().size() == 1);
             editRow.setVisible(selected.isFile());
             compareRow.setVisible(selected.isFile());
             editWithRow.setVisible(selected.isFile());
@@ -547,6 +582,35 @@ public class BrowserController extends FxController {
         final MenuItem showTransfers = new MenuItem(Messages.get("Transfers"));
         showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
         showTransfers.setOnAction(event -> TransferController.get().show());
+        final MenuItem newFolderItem = this.item(Messages.get("New Folder") + "…", this::newFolder);
+        newFolderItem.setAccelerator(KeyCombination.keyCombination("Shortcut+Shift+N"));
+        newFolderItem.disableProperty().bind(newFolder.disableProperty());
+        final MenuItem newFileItem = this.item(Messages.get("New File") + "…", this::newFile);
+        newFileItem.setAccelerator(KeyCombination.keyCombination("Shortcut+Alt+N"));
+        newFileItem.disableProperty().bind(newFolder.disableProperty());
+        final MenuItem downloadToItem = this.item(Messages.get("Download To…"), this::downloadTo);
+        downloadToItem.disableProperty().bind(download.disableProperty());
+        final MenuItem downloadAsItem = this.item(Messages.get("Download As…"), this::downloadAs);
+        downloadAsItem.disableProperty().bind(Bindings.size(table.getSelectionModel().getSelectedItems()).isNotEqualTo(1));
+        final MenuItem openWeb = this.item(Messages.get("Open in Web Browser"), this::openInWebBrowser);
+        openWeb.disableProperty().bind(newFolder.disableProperty());
+        final MenuItem terminalItem = this.item(Messages.get("Open in Terminal"), this::openTerminal);
+        terminalItem.setAccelerator(KeyCombination.keyCombination("Shortcut+Alt+T"));
+        terminalItem.disableProperty().bind(newFolder.disableProperty());
+        final MenuItem cutItem = this.item(Messages.get("Cut"), this::cutFiles);
+        cutItem.setAccelerator(KeyCombination.keyCombination("Shortcut+X"));
+        cutItem.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        final MenuItem copyItem = this.item(Messages.get("Copy"), this::copyFiles);
+        copyItem.setAccelerator(KeyCombination.keyCombination("Shortcut+C"));
+        copyItem.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        final MenuItem pasteItem = this.item(Messages.get("Paste"), this::paste);
+        pasteItem.setAccelerator(KeyCombination.keyCombination("Shortcut+V"));
+        pasteItem.disableProperty().bind(newFolder.disableProperty());
+        final MenuItem copyUrlItem = this.item(Messages.get("Copy URL"), this::copyUrl);
+        copyUrlItem.setAccelerator(KeyCombination.keyCombination("Shortcut+Shift+C"));
+        copyUrlItem.disableProperty().bind(newFolder.disableProperty());
+        final MenuItem selectAll = this.item(Messages.get("Select All"), () -> table.getSelectionModel().selectAll());
+        selectAll.setAccelerator(KeyCombination.keyCombination("Shortcut+A"));
         final CheckMenuItem hidden = new CheckMenuItem(Messages.get("Show Hidden Files"));
         hidden.setAccelerator(KeyCombination.keyCombination("Shortcut+Shift+."));
         hidden.setSelected(preferences.getBoolean("browser.showHidden"));
@@ -580,7 +644,8 @@ public class BrowserController extends FxController {
         quickItem.setAccelerator(KeyCombination.keyCombination("Shortcut+K"));
         final String website = preferences.getProperty("website.help");
         menu = new MenuBar(
-            new Menu(Messages.get("File"), null, newBrowser, open, quickItem, disconnect, new SeparatorMenuItem(), edit, compareItem, duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("File"), null, newBrowser, open, quickItem, disconnect, new SeparatorMenuItem(), newFolderItem, newFileItem, new SeparatorMenuItem(), downloadToItem, downloadAsItem, new SeparatorMenuItem(), openWeb, terminalItem, new SeparatorMenuItem(), edit, compareItem, duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("Edit"), null, cutItem, copyItem, pasteItem, new SeparatorMenuItem(), copyUrlItem, selectAll),
             new Menu(Messages.get("View"), null, hidden, refreshItem, findItem),
             new Menu(Messages.get("Go"), null, backItem, forwardItem, upItem, goTo),
             new Menu(Messages.get("Window"), null, showTransfers),
@@ -663,7 +728,16 @@ public class BrowserController extends FxController {
             Messages.get("Overwrite"), Messages.get("Cancel"), false)) {
             return;
         }
-        final Map<Path, Path> files = Collections.singletonMap(source, target);
+        this.copy(Collections.singletonMap(source, target), target);
+    }
+
+    /**
+     * Copy files on the server
+     *
+     * @param files  Source and destination of each
+     * @param select Select this file when the copy is done or null
+     */
+    void copy(final Map<Path, Path> files, final Path select) {
         // A stateful protocol needs a connection of its own, because the one of the browser is busy listing
         final SessionPool destination = pool.getHost().getProtocol().getStatefulness() == Protocol.Statefulness.stateful
             ? SessionPoolFactory.create(this, pool.getHost()) : pool;
@@ -672,7 +746,43 @@ public class BrowserController extends FxController {
                 @Override
                 public void cleanup(final Map<Path, Path> result) {
                     super.cleanup(result);
-                    selectAfterRender = target;
+                    if(destination != pool) {
+                        destination.shutdown();
+                    }
+                    if(result != null && !result.isEmpty()) {
+                        selectAfterRender = select;
+                    }
+                    reload();
+                }
+            }));
+    }
+
+    /**
+     * Move files on the server
+     *
+     * @param files  Source and destination of each
+     * @param select Select this file when the move is done or null
+     */
+    void move(final Map<Path, Path> files, final Path select) {
+        // Moving needs a second connection to the same server to borrow while the first is in use
+        final SessionPool target = pool.getHost().getProtocol().getStatefulness() == Protocol.Statefulness.stateful
+            ? SessionPoolFactory.create(this, pool.getHost()) : pool;
+        this.background(new WorkerBackgroundAction<>(this, pool,
+            new MoveWorker(files, target, cache, this, LoginCallbackFactory.get(this)) {
+                @Override
+                public void cleanup(final Map<Path, Path> result) {
+                    super.cleanup(result);
+                    if(target != pool) {
+                        target.shutdown();
+                    }
+                    for(Path file : files.keySet()) {
+                        if(file.isDirectory()) {
+                            cache.invalidate(file);
+                        }
+                    }
+                    if(result != null && !result.isEmpty()) {
+                        selectAfterRender = select;
+                    }
                     reload();
                 }
             }));
@@ -1219,6 +1329,270 @@ public class BrowserController extends FxController {
     }
 
     /**
+     * Ask for a name and create an empty file in the folder that is shown
+     */
+    void newFile() {
+        if(!this.isMounted() || null == workdir) {
+            return;
+        }
+        final String name = dialogs.input(Messages.get("New File"), Messages.get("Enter the name of the new file"), "untitled.txt");
+        if(StringUtils.isBlank(name)) {
+            return;
+        }
+        final Path file = new Path(workdir, StringUtils.trim(name), EnumSet.of(Path.Type.file));
+        if(cache.get(workdir).contains(file)) {
+            dialogs.error(Messages.get("New File"), String.format(Messages.get("The file {0} exists.").replace("{0}", "%s"), file.getName()));
+            return;
+        }
+        this.background(new WorkerBackgroundAction<>(this, pool, new TouchWorker(file) {
+            @Override
+            public void cleanup(final Path created) {
+                super.cleanup(created);
+                if(created != null) {
+                    selectAfterRender = file;
+                }
+                reload();
+            }
+        }));
+    }
+
+    /**
+     * Ask for a folder on this computer and download the selected files into it
+     */
+    void downloadTo() {
+        if(!this.isMounted() || table.getSelectionModel().isEmpty()) {
+            return;
+        }
+        final DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle(Messages.get("Download To…"));
+        final Local suggested = new DownloadDirectoryFinder().find(pool.getHost());
+        if(suggested.exists()) {
+            chooser.setInitialDirectory(new File(suggested.getAbsolute()));
+        }
+        final File folder = chooser.showDialog(stage);
+        if(folder != null) {
+            this.downloadTo(new ArrayList<>(table.getSelectionModel().getSelectedItems()), folder);
+        }
+    }
+
+    void downloadTo(final List<Path> files, final File folder) {
+        final Local target = LocalFactory.get(folder.getAbsolutePath());
+        this.transfer(new DownloadTransfer(pool.getHost(), files.stream()
+            .map(file -> new TransferItem(file, LocalFactory.get(target, file.getName()))).collect(Collectors.toList())));
+    }
+
+    /**
+     * Ask for the name on this computer and download the selected file with that name
+     */
+    void downloadAs() {
+        if(!this.isMounted() || table.getSelectionModel().getSelectedItems().size() != 1) {
+            return;
+        }
+        final Path file = table.getSelectionModel().getSelectedItem();
+        final FileChooser chooser = new FileChooser();
+        chooser.setTitle(Messages.get("Download As…"));
+        chooser.setInitialFileName(file.getName());
+        final Local suggested = new DownloadDirectoryFinder().find(pool.getHost());
+        if(suggested.exists()) {
+            chooser.setInitialDirectory(new File(suggested.getAbsolute()));
+        }
+        final File chosen = chooser.showSaveDialog(stage);
+        if(chosen != null) {
+            this.downloadAs(file, chosen);
+        }
+    }
+
+    void downloadAs(final Path file, final File chosen) {
+        this.transfer(new DownloadTransfer(pool.getHost(), Collections.singletonList(new TransferItem(file, LocalFactory.get(chosen.getAbsolutePath())))));
+    }
+
+    /**
+     * The selected files, or else the folder that is shown
+     */
+    private List<Path> selectedOrWorkdir() {
+        final List<Path> selected = new ArrayList<>(table.getSelectionModel().getSelectedItems());
+        if(selected.isEmpty() && null != workdir) {
+            selected.add(workdir);
+        }
+        return selected;
+    }
+
+    /**
+     * Ask the server for the addresses of the files and hand them over in the order of the files
+     */
+    private void urls(final List<Path> files, final java.util.function.Consumer<List<DescriptiveUrlBag>> done) {
+        if(!this.isMounted() || files.isEmpty()) {
+            return;
+        }
+        final DescriptiveUrlBag[] results = new DescriptiveUrlBag[files.size()];
+        final java.util.concurrent.atomic.AtomicInteger remaining = new java.util.concurrent.atomic.AtomicInteger(files.size());
+        for(int i = 0; i < files.size(); i++) {
+            final int index = i;
+            this.background(new WorkerBackgroundAction<>(this, pool, new InfoController.UrlWorker(files.get(i)) {
+                @Override
+                public void cleanup(final DescriptiveUrlBag result, final ch.cyberduck.core.exception.BackgroundException failure) {
+                    super.cleanup(result, failure);
+                    results[index] = null == result ? DescriptiveUrlBag.empty() : result;
+                    if(remaining.decrementAndGet() == 0) {
+                        done.accept(Arrays.asList(results));
+                    }
+                }
+            }));
+        }
+    }
+
+    /**
+     * Put the addresses of the selected files, or of the folder that is shown, on the clipboard
+     */
+    void copyUrl() {
+        this.urls(this.selectedOrWorkdir(), bags -> {
+            final List<String> lines = new ArrayList<>();
+            for(DescriptiveUrlBag bag : bags) {
+                if(!bag.isEmpty()) {
+                    final DescriptiveUrl preferred = bag.find(DescriptiveUrl.Type.provider);
+                    lines.add((preferred != DescriptiveUrl.EMPTY ? preferred : bag.iterator().next()).getUrl());
+                }
+            }
+            if(!lines.isEmpty()) {
+                final ClipboardContent content = new ClipboardContent();
+                content.putString(String.join(System.lineSeparator(), lines));
+                javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
+                this.message(String.format(Messages.get("Copied {0} URL").replace("{0}", "%d"), lines.size()));
+            }
+        });
+    }
+
+    /**
+     * Show the first selected file, or else the folder that is shown, in the web browser, when the server has a web address for it
+     */
+    void openInWebBrowser() {
+        this.urls(this.selectedOrWorkdir().subList(0, Math.min(1, this.selectedOrWorkdir().size())), bags -> {
+            final DescriptiveUrl web = bags.isEmpty() ? DescriptiveUrl.EMPTY : bags.get(0).find(DescriptiveUrl.Type.http);
+            if(web == DescriptiveUrl.EMPTY) {
+                dialogs.error(Messages.get("Open in Web Browser"), Messages.get("The server has no web address for this file."));
+            }
+            else {
+                this.browse(web.getUrl());
+            }
+        });
+    }
+
+    /**
+     * Open a terminal with a shell on the server in the folder that is shown or the selected folder
+     */
+    void openTerminal() {
+        if(!this.isMounted() || null == workdir || !TerminalLauncher.isSupported(pool.getHost())) {
+            return;
+        }
+        final Path selected = table.getSelectionModel().getSelectedItem();
+        final Path folder = null != selected && selected.isDirectory() ? selected : workdir;
+        if(!TerminalLauncher.open(pool.getHost(), folder)) {
+            dialogs.error(Messages.get("Open in Terminal"), Messages.get("No terminal program was found. Install one or set it in the preferences."));
+        }
+    }
+
+    /**
+     * Files copied or cut, to be pasted in a folder of the same connection, also in another window
+     */
+    private static final class PathClipboard {
+        private final List<Path> files;
+        private final Host host;
+        private final boolean cut;
+
+        private PathClipboard(final List<Path> files, final Host host, final boolean cut) {
+            this.files = files;
+            this.host = host;
+            this.cut = cut;
+        }
+    }
+
+    private static volatile PathClipboard clipboard;
+
+    void copyFiles() {
+        this.remember(false);
+    }
+
+    void cutFiles() {
+        this.remember(true);
+    }
+
+    private void remember(final boolean cut) {
+        if(this.isMounted() && !table.getSelectionModel().isEmpty()) {
+            clipboard = new PathClipboard(new ArrayList<>(table.getSelectionModel().getSelectedItems()), pool.getHost(), cut);
+            this.message(String.format(Messages.get(cut ? "Cut {0} items" : "Copied {0} items").replace("{0}", "%d"), clipboard.files.size()));
+        }
+    }
+
+    /**
+     * Put what was copied or cut in the selected folder or else the folder that is shown
+     */
+    void paste() {
+        final PathClipboard remembered = clipboard;
+        if(null == remembered || !this.isMounted() || null == workdir) {
+            return;
+        }
+        if(!remembered.host.equals(pool.getHost())) {
+            dialogs.error(Messages.get("Paste"), Messages.get("Files can only be pasted in the connection they were copied from."));
+            return;
+        }
+        final Path selected = table.getSelectionModel().getSelectedItem();
+        final Path folder = table.getSelectionModel().getSelectedItems().size() == 1 && selected.isDirectory() ? selected : workdir;
+        final Map<Path, Path> files = new java.util.LinkedHashMap<>();
+        final java.util.Set<String> taken = new java.util.HashSet<>();
+        for(Path file : remembered.files) {
+            if(folder.equals(file) || folder.isChild(file)) {
+                // A folder cannot go into itself
+                continue;
+            }
+            if(remembered.cut && folder.equals(file.getParent())) {
+                // Nothing to move
+                continue;
+            }
+            String name = file.getName();
+            if(!remembered.cut) {
+                // A copy next to the original, or over an existing file, gets a name of its own
+                final String base = FilenameUtils.getBaseName(name);
+                final String extension = FilenameUtils.getExtension(name);
+                int count = 0;
+                while(cache.get(folder).contains(new Path(folder, name, file.getType())) || !taken.add(name)) {
+                    name = String.format("%s %s%s%s", base, Messages.get("copy"), count++ == 0 ? "" : " " + count, StringUtils.isEmpty(extension) ? "" : "." + extension);
+                    if(count > 1000) {
+                        break;
+                    }
+                }
+            }
+            files.put(file, new Path(folder, name, file.getType()));
+        }
+        if(files.isEmpty()) {
+            return;
+        }
+        final Path select = files.values().iterator().next();
+        if(remembered.cut) {
+            clipboard = null;
+            this.move(files, select);
+        }
+        else {
+            this.copy(files, select);
+        }
+    }
+
+    /**
+     * Move files into a folder of the same connection, for example when they are dragged onto the folder
+     */
+    void moveTo(final List<Path> files, final Path folder) {
+        final Map<Path, Path> moves = new java.util.LinkedHashMap<>();
+        for(Path file : files) {
+            if(folder.equals(file) || folder.isChild(file) || folder.equals(file.getParent())) {
+                continue;
+            }
+            moves.put(file, new Path(folder, file.getName(), file.getType()));
+        }
+        if(!moves.isEmpty() && this.isMounted()) {
+            this.move(moves, null);
+        }
+    }
+
+    /**
      * Ask for a new name for the selected file
      */
     void rename() {
@@ -1235,26 +1609,7 @@ public class BrowserController extends FxController {
             return;
         }
         final Path renamed = new Path(file.getParent(), StringUtils.trim(name), file.getType());
-        // Moving needs a second connection to the same server to borrow while the first is in use
-        final SessionPool target = pool.getHost().getProtocol().getStatefulness() == Protocol.Statefulness.stateful
-            ? SessionPoolFactory.create(this, pool.getHost()) : pool;
-        this.background(new WorkerBackgroundAction<>(this, pool,
-            new MoveWorker(Collections.singletonMap(file, renamed), target, cache, this, LoginCallbackFactory.get(this)) {
-                @Override
-                public void cleanup(final Map<Path, Path> result) {
-                    super.cleanup(result);
-                    if(target != pool) {
-                        target.shutdown();
-                    }
-                    if(file.isDirectory()) {
-                        cache.invalidate(file);
-                    }
-                    if(result != null && !result.isEmpty()) {
-                        selectAfterRender = renamed;
-                    }
-                    reload();
-                }
-            }));
+        this.move(Collections.singletonMap(file, renamed), renamed);
     }
 
     /**
@@ -1373,12 +1728,14 @@ public class BrowserController extends FxController {
             files.add(batch.ready(file.getName()).toFile());
             names.add(file.getName());
         }
-        final Dragboard board = row.startDragAndDrop(TransferMode.COPY);
+        final Dragboard board = row.startDragAndDrop(TransferMode.COPY_OR_MOVE);
         final ClipboardContent content = new ClipboardContent();
         content.putFiles(files);
         board.setContent(content);
         log.debug("Drag {} out as {}", selected, files);
-        TransferController.get().start(new DownloadTransfer(pool.getHost(), items), new TransferOptions(), this, completed -> {
+        // The download starts when the files leave the window. Dropped on a folder of this window they are moved instead.
+        dragged = selected;
+        pendingDrag = () -> TransferController.get().start(new DownloadTransfer(pool.getHost(), items), new TransferOptions(), this, completed -> {
             if(completed.isComplete()) {
                 batch.publish(names);
             }
@@ -1386,8 +1743,35 @@ public class BrowserController extends FxController {
         event.consume();
     }
 
-    private void acceptDrag(final DragEvent event) {
-        if(this.isMounted() && event.getDragboard().hasFiles()) {
+    /**
+     * Files of this listing that are being dragged and have not left the window yet
+     */
+    private volatile Runnable pendingDrag;
+    private volatile List<Path> dragged;
+
+    private void startPendingDrag() {
+        final Runnable start = pendingDrag;
+        pendingDrag = null;
+        if(start != null) {
+            start.run();
+        }
+    }
+
+    /**
+     * @return True when the files are dragged from the listing of this window
+     */
+    private boolean isInternal(final DragEvent event) {
+        return null != dragged && event.getGestureSource() instanceof javafx.scene.Node source && source.getScene() == table.getScene();
+    }
+
+    private void acceptDrag(final DragEvent event, final Path folder) {
+        if(this.isInternal(event)) {
+            // Files of the listing can be moved into another folder of the listing
+            if(folder != null && !dragged.contains(folder)) {
+                event.acceptTransferModes(TransferMode.MOVE);
+            }
+        }
+        else if(this.isMounted() && event.getDragboard().hasFiles()) {
             event.acceptTransferModes(TransferMode.COPY);
         }
         event.consume();
@@ -1400,7 +1784,15 @@ public class BrowserController extends FxController {
      */
     private void drop(final DragEvent event, final Path folder) {
         boolean completed = false;
-        if(this.isMounted() && event.getDragboard().hasFiles()) {
+        if(this.isInternal(event)) {
+            if(folder != null) {
+                final List<Path> files = dragged;
+                pendingDrag = null;
+                this.moveTo(files, folder);
+                completed = true;
+            }
+        }
+        else if(this.isMounted() && event.getDragboard().hasFiles()) {
             this.upload(event.getDragboard().getFiles(), folder);
             completed = true;
         }

@@ -125,6 +125,13 @@ printf '#!/bin/sh\nprintf "%%s\\n%%s\\n" "$1" "$2" >> "%s/cmp-log.txt"\n' "$work
 chmod +x "$work/cmp-tool.sh"
 HOME="$work/home-vault" smoke '^SMOKE OK compare launched=2 downloaded=g.txt$' compare "$work/cmp-remote" "$work/cmp-down" "$work/cmp-tool.sh" "$work/cmp-log.txt"
 
+# New file, copy, cut, paste, download to a folder and with a name, the address, the size of a folder and a drag onto a folder
+mkdir -p "$work/files/d" "$work/files/t" "$work/files/big"
+printf 'file content' > "$work/files/f.txt"
+printf '0123456789' > "$work/files/big/a.bin"
+printf '01234' > "$work/files/big/b.bin"
+HOME="$work/home-vault" smoke '^SMOKE OK files copied=ok moved=ok download=ok size=15 dragged=(ok|skipped)$' files "$work/files"
+
 # Drag a file and a folder out of the listing with the mouse into another window. Needs xdotool for the mouse.
 if command -v xdotool >/dev/null 2>&1; then
     mkdir -p "$work/drag/d"
@@ -190,7 +197,10 @@ if docker info >/dev/null 2>&1; then
             timeout 3 bash -c "exec 3<>/dev/tcp/127.0.0.1/$key_port; read -t 2 line <&3; [[ \$line == SSH-* ]]" 2>/dev/null && break
             sleep 0.5
         done
-        smoke '^SMOKE OK sshkey ' sshkey 127.0.0.1 "$key_port" foo "$work/keys/id_ed25519"
+        # Open in Terminal starts a program that writes down what it was asked to run
+        printf '#!/bin/sh\necho "$*" > "$0.log"\n' > "$work/keys/fake-terminal.sh"
+        chmod +x "$work/keys/fake-terminal.sh"
+        smoke '^SMOKE OK sshkey ' sshkey 127.0.0.1 "$key_port" foo "$work/keys/id_ed25519" "$work/keys/fake-terminal.sh"
         docker stop "$key_container" >/dev/null 2>&1
     else
         echo "skip sshkey (ssh-keygen is not installed)"

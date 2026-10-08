@@ -165,7 +165,11 @@ public final class Smoke {
                     hold();
                     return 0;
                 case "sshkey":
-                    System.out.printf("SMOKE OK sshkey %s%n", sshkey(browser, arguments.get(1), arguments.get(2), arguments.get(3), arguments.get(4)));
+                    System.out.printf("SMOKE OK sshkey %s%n", sshkey(browser, arguments.get(1), arguments.get(2), arguments.get(3), arguments.get(4),
+                        arguments.size() > 5 ? arguments.get(5) : null));
+                    return 0;
+                case "files":
+                    System.out.println(files(browser, arguments.get(1)));
                     return 0;
                 case "windows":
                     windows(browser, arguments.get(1), arguments.get(2));
@@ -481,7 +485,8 @@ public final class Smoke {
      *
      * @return Summary of the dialogs answered
      */
-    private static String sshkey(final BrowserController browser, final String host, final String port, final String user, final String key) throws Exception {
+    private static String sshkey(final BrowserController browser, final String host, final String port, final String user, final String key,
+                                 final String terminal) throws Exception {
         final java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
         onFx(() -> {
             Platform.runLater(browser::connect);
@@ -502,9 +507,150 @@ public final class Smoke {
         awaitAnswering("login with the key", "", counts, () -> onFx(() -> null != browser.getRendered()));
         check("no password was asked", 0 == counts.getOrDefault("password", 0));
         check("the folder of the account is listed", names(browser).contains("upload"));
+        if(terminal != null) {
+            // Open in Terminal starts the chosen program with ssh, the port, the key and the folder. The program is a script that writes down its arguments.
+            ch.cyberduck.core.preferences.PreferencesFactory.get().setProperty(TerminalLauncher.PROPERTY, terminal);
+            onFx(() -> {
+                browser.openTerminal();
+                return null;
+            });
+            final java.nio.file.Path log = java.nio.file.Paths.get(terminal + ".log");
+            await("terminal started", () -> java.nio.file.Files.exists(log) && content(log).contains("ssh"));
+            final String arguments = content(log);
+            check("terminal got the port", arguments.contains("-p " + port));
+            check("terminal got the key", arguments.contains("-i " + key));
+            check("terminal got the account", arguments.contains(user + "@" + host));
+            check("terminal starts in the folder", arguments.contains("cd '"));
+        }
         menu(browser, "Disconnect");
         await("disconnected", () -> onFx(() -> !browser.isMounted()));
         return counts.toString();
+    }
+
+    /**
+     * New files, copy, cut and paste, download to a folder and with a name, the address on the clipboard, the size of a
+     * folder, and files dragged onto a folder of the listing with the mouse
+     *
+     * @param directory Folder with f.txt, the folders d, t and big (with a.bin of 10 bytes and b.bin of 5 bytes)
+     */
+    private static String files(final BrowserController browser, final String directory) throws Exception {
+        mount(browser, directory);
+        final java.nio.file.Path root = java.nio.file.Paths.get(directory);
+        // New File
+        onFx(() -> {
+            Platform.runLater(browser::newFile);
+            return null;
+        });
+        answerInput("new.txt");
+        await("new file shown", () -> names(browser).contains("new.txt"));
+        check("new file is empty on disk", 0 == java.nio.file.Files.size(root.resolve("new.txt")));
+        check("new file is selected", "new.txt".equals(onFx(() -> browser.getTable().getSelectionModel().getSelectedItem().getName())));
+        // Copy and paste next to the original, twice, and into a folder
+        select(browser, "f.txt");
+        onFx(() -> {
+            browser.copyFiles();
+            browser.paste();
+            return null;
+        });
+        await("first copy", () -> names(browser).contains("f copy.txt"));
+        onFx(() -> {
+            browser.paste();
+            return null;
+        });
+        await("second copy", () -> names(browser).contains("f copy 2.txt"));
+        check("the copy has the content", -1 == java.nio.file.Files.mismatch(root.resolve("f.txt"), root.resolve("f copy.txt")));
+        select(browser, "t");
+        onFx(() -> {
+            browser.paste();
+            return null;
+        });
+        await("copy in the folder", () -> java.nio.file.Files.exists(root.resolve("t").resolve("f.txt")));
+        check("the original stays after a copy", java.nio.file.Files.exists(root.resolve("f.txt")));
+        // Cut and paste moves
+        select(browser, "new.txt");
+        onFx(() -> {
+            browser.cutFiles();
+            return null;
+        });
+        select(browser, "d");
+        onFx(() -> {
+            browser.paste();
+            return null;
+        });
+        await("moved into the folder", () -> java.nio.file.Files.exists(root.resolve("d").resolve("new.txt")));
+        await("gone from the folder", () -> !names(browser).contains("new.txt"));
+        check("the moved file is gone from the old place", !java.nio.file.Files.exists(root.resolve("new.txt")));
+        // Download to a folder and with a name
+        final java.nio.file.Path downloads = java.nio.file.Files.createTempDirectory("files-download");
+        final Path remote = onFx(() -> browser.getTable().getItems().stream().filter(p -> p.getName().equals("f.txt")).findFirst().orElseThrow());
+        onFx(() -> {
+            browser.downloadTo(List.of(remote), downloads.toFile());
+            return null;
+        });
+        await("download to the folder", () -> java.nio.file.Files.exists(downloads.resolve("f.txt")));
+        onFx(() -> {
+            browser.downloadAs(remote, downloads.resolve("renamed.txt").toFile());
+            return null;
+        });
+        await("download with a name", () -> java.nio.file.Files.exists(downloads.resolve("renamed.txt")));
+        check("downloads have the content", -1 == java.nio.file.Files.mismatch(root.resolve("f.txt"), downloads.resolve("renamed.txt")));
+        // The address on the clipboard
+        select(browser, "f.txt");
+        onFx(() -> {
+            javafx.scene.input.Clipboard.getSystemClipboard().clear();
+            browser.copyUrl();
+            return null;
+        });
+        await("address on the clipboard", () -> onFx(() -> {
+            final String text = javafx.scene.input.Clipboard.getSystemClipboard().getString();
+            return null != text && text.contains("f.txt");
+        }));
+        // The size of a folder is added up in the info window
+        select(browser, "big");
+        onFx(() -> {
+            Platform.runLater(browser::info);
+            return null;
+        });
+        await("info window", () -> onFx(() -> !browser.getInfos().isEmpty() && browser.getInfos().get(0).getStage().isShowing()));
+        final InfoController info = browser.getInfos().get(0);
+        check("the size of a folder is not guessed", onFx(() -> info.getSize().getText().isEmpty()));
+        onFx(() -> {
+            info.getCalculate().fire();
+            return null;
+        });
+        await("folder size calculated", () -> onFx(() -> info.getBytes() == 15));
+        onFx(() -> {
+            info.getStage().close();
+            return null;
+        });
+        // Drag a file onto a folder of the listing with the mouse: it moves and nothing is downloaded
+        String dragged = "skipped";
+        if(onPath("xdotool")) {
+            final int transfersBefore = onFx(() -> TransferController.get().getTable().getItems().size());
+            await("rows", () -> onFx(() -> null != row(browser, "f copy 2.txt") && null != row(browser, "t")));
+            final double[] from = onFx(() -> {
+                final javafx.geometry.Bounds b = row(browser, "f copy 2.txt").localToScreen(row(browser, "f copy 2.txt").getBoundsInLocal());
+                return new double[]{b.getMinX() + 60, b.getMinY() + b.getHeight() / 2};
+            });
+            final double[] to = onFx(() -> {
+                final javafx.geometry.Bounds b = row(browser, "t").localToScreen(row(browser, "t").getBoundsInLocal());
+                return new double[]{b.getMinX() + 60, b.getMinY() + b.getHeight() / 2};
+            });
+            xdotool("mousemove", String.valueOf((int) from[0]), String.valueOf((int) from[1]));
+            xdotool("mousedown", "1");
+            TimeUnit.MILLISECONDS.sleep(300);
+            for(int step = 1; step <= 20; step++) {
+                xdotool("mousemove", String.valueOf((int) (from[0] + (to[0] - from[0]) * step / 20)), String.valueOf((int) (from[1] + (to[1] - from[1]) * step / 20)));
+                TimeUnit.MILLISECONDS.sleep(50);
+            }
+            xdotool("mouseup", "1");
+            await("moved by the mouse", () -> java.nio.file.Files.exists(root.resolve("t").resolve("f copy 2.txt")));
+            await("gone from the old place", () -> !names(browser).contains("f copy 2.txt"));
+            check("the file is not on disk at the old place", !java.nio.file.Files.exists(root.resolve("f copy 2.txt")));
+            check("nothing was downloaded", transfersBefore == onFx(() -> TransferController.get().getTable().getItems().size()));
+            dragged = "ok";
+        }
+        return String.format("SMOKE OK files copied=ok moved=ok download=ok size=15 dragged=%s", dragged);
     }
 
     /**
@@ -663,8 +809,13 @@ public final class Smoke {
 
     private static void menu(final BrowserController browser, final String menu, final String name) throws Exception {
         onFx(() -> {
-            browser.getMenuBar().getMenus().stream().filter(m -> menu.equals(m.getText())).findFirst().orElseThrow()
-                .getItems().stream().filter(i -> name.equals(i.getText())).findFirst().orElseThrow().fire();
+            final javafx.scene.control.MenuItem item = browser.getMenuBar().getMenus().stream().filter(m -> menu.equals(m.getText())).findFirst().orElseThrow()
+                .getItems().stream().filter(i -> name.equals(i.getText())).findFirst().orElseThrow();
+            // A click toggles a check item before it fires
+            if(item instanceof javafx.scene.control.CheckMenuItem check) {
+                check.setSelected(!check.isSelected());
+            }
+            item.fire();
             return null;
         });
     }
@@ -963,6 +1114,24 @@ public final class Smoke {
         await(String.format("directory %s shown", directory), () -> onFx(() -> null != browser.getRendered() && directory.equals(browser.getRendered().getAbsolute())));
     }
 
+    /**
+     * Open a folder with a double click. A listing that is still being refreshed, for example after unlocking a vault,
+     * replaces the folder that was asked for, so the click is repeated.
+     */
+    static void openFolder(final BrowserController browser, final String name, final String directory) throws Exception {
+        for(int attempt = 0; attempt < 3; attempt++) {
+            doubleClick(browser, name);
+            final long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(15);
+            while(System.currentTimeMillis() < deadline) {
+                if(onFx(() -> null != browser.getRendered() && directory.equals(browser.getRendered().getAbsolute()))) {
+                    return;
+                }
+                TimeUnit.MILLISECONDS.sleep(100);
+            }
+        }
+        awaitRendered(browser, directory);
+    }
+
     static List<String> names(final BrowserController browser) throws Exception {
         return onFx(() -> browser.getTable().getItems().stream().map(Path::getName).collect(Collectors.toList()));
     }
@@ -1249,8 +1418,7 @@ public final class Smoke {
         check("asked for the passphrase", counts.containsKey("password"));
 
         // Inside the vault the upload is encrypted
-        doubleClick(browser, "secret");
-        awaitRendered(browser, directory + "/secret");
+        openFolder(browser, "secret", directory + "/secret");
         final int before = TransferController.get().getCompleted();
         onFx(() -> {
             browser.upload(List.of(local));
