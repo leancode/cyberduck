@@ -1461,6 +1461,14 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   - [ ] Wayland: not tested, there is no Wayland session on the test machine. JavaFX uses GTK through XWayland. To be looked at on a desktop.
   - [ ] Other protocols (A13): not done. Needs the list of the protocols that are used.
 
+- [x] **6.18 Second round of manual testing (2026-10-08, deb of run 22)** 
+
+  Drag and drop works in both directions. What the owner found:
+  - [x] More Options pushed Save and Cancel out of the window. The window grows with the options now (the scenario `bookmarks` expands them and requires the buttons in view).
+  - [x] Toolbar: refresh, download, upload, new folder and delete are symbols with the word as a tooltip, Rename is out of the toolbar (it stays in the menus, on the right mouse button and on F2), Transfers stays text. The symbols are the ones of the macOS toolbar in `img/toolbar/*.pdf`, converted to vector shapes in `Icons`, so they follow the theme.
+  - [x] Report a Bug opens the issues of this repository (`website.bug`); About names the repository. GitHub does not enable Issues on a repository that began as a fork: Settings > General > Features > Issues, to be switched on by the owner.
+  - [ ] Open in Terminal did nothing. Not reproduced, the test machine has no terminal program. Changed for the likely causes: the terminal that the desktop is set to (gsettings of Cinnamon, GNOME or MATE) is used first, the known terminals come before `x-terminal-emulator` (which can take `-e` in another way, for example on Linux Mint with GNOME Terminal), and a terminal that ends with a failure within two seconds is reported with what it said instead of silently. Covered by `TerminalLauncherTest`; to be tried on the owner's desktop.
+
 ## Phase 7: Repository, releases and the offer to upstream (decided 2026-10-08)
 
 - [x] **7.1 Layout of the repository**
@@ -1477,7 +1485,7 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   - [x] `check`: the commit of the tag must have a successful run of `Linux GUI` (tests, scenarios and install tests).
   - [x] `build` for x64 (`ubuntu-24.04`) and arm64 (`ubuntu-24.04-arm`): builds the deb and rpm, validates the desktop entry, installs the deb with its dependencies and starts it.
   - [x] `release` (tags only): writes `SHA256SUMS` and creates a pre-release on GitHub with the packages, a text that says it is a community build, and the generated list of changes.
-  - [ ] Started by hand (`workflow_dispatch`) it builds and tests without a release. A dry run on both architectures has to pass before the first tag.
+  - [x] Started by hand (`workflow_dispatch`) it builds and tests without a release. The dry run passed on x64 and arm64 on 2026-10-08 (https://github.com/leancode/cyberduck-linux/actions/runs/37768672122), including the install of the deb and the start of the application on both. The `release` job has not run yet, it needs a tag.
 
 - [ ] **7.2 First release**
 

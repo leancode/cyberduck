@@ -261,16 +261,23 @@ public class BrowserController extends FxController {
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, bookmarksToggle, connect, back, forward, up, refresh, download, upload, newFolder, rename, delete, transfers, location, quick, search);
+        final HBox top = new HBox(8, bookmarksToggle, connect, back, forward, up, refresh, download, upload, newFolder, delete, transfers, location, quick, search);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
         // Never cut the labels of the buttons. The path field gives way instead and the window cannot get narrower than the toolbar.
-        for(Region button : new Region[]{bookmarksToggle, connect, back, forward, up, refresh, download, upload, newFolder, rename, delete, transfers}) {
+        for(Region button : new Region[]{bookmarksToggle, connect, back, forward, up, refresh, download, upload, newFolder, delete, transfers}) {
             button.setMinWidth(Region.USE_PREF_SIZE);
         }
         back.setGraphic(Icons.back());
         back.setTooltip(new Tooltip(Messages.get("Back")));
         back.setAccessibleText(Messages.get("Back"));
+        // Symbols instead of words keep the toolbar short; the word shows when the pointer rests on the symbol.
+        // Rename is in the menus, on the right mouse button and on F2.
+        this.symbol(refresh, Icons.reload(), "Refresh");
+        this.symbol(download, Icons.download(), "Download");
+        this.symbol(upload, Icons.upload(), "Upload");
+        this.symbol(newFolder, Icons.newFolder(), "New Folder");
+        this.symbol(delete, Icons.trash(), "Delete");
         forward.setGraphic(Icons.forward());
         forward.setTooltip(new Tooltip(Messages.get("Forward")));
         forward.setAccessibleText(Messages.get("Forward"));
@@ -404,6 +411,14 @@ public class BrowserController extends FxController {
         root.setBottom(new VBox(logView, bottom));
         this.updateNavigation();
         return root;
+    }
+
+    private void symbol(final Button button, final javafx.scene.Node icon, final String label) {
+        final String text = Messages.get(label);
+        button.setText(null);
+        button.setGraphic(icon);
+        button.setTooltip(new Tooltip(text));
+        button.setAccessibleText(text);
     }
 
     private TableColumn<Path, Path> column(final String title, final double width, final Comparator<Path> comparator,
@@ -690,8 +705,8 @@ public class BrowserController extends FxController {
         alert.initOwner(stage);
         alert.setTitle(Messages.get("About Cyberduck"));
         alert.setHeaderText(String.format("%s %s", preferences.getProperty("application.name"), Version.get()));
-        alert.setContentText(String.format("%s%n%n%s", Messages.get("Cloud storage browser for FTP, SFTP, WebDAV, Amazon S3 and more."),
-            preferences.getProperty("website.home")));
+        alert.setContentText(String.format("%s%n%n%s%n%s", Messages.get("Cloud storage browser for FTP, SFTP, WebDAV, Amazon S3 and more."),
+            preferences.getProperty("website.home"), preferences.getProperty("website.linux")));
         alert.showAndWait();
     }
 
@@ -1508,8 +1523,9 @@ public class BrowserController extends FxController {
         }
         final Path selected = table.getSelectionModel().getSelectedItem();
         final Path folder = null != selected && selected.isDirectory() ? selected : workdir;
-        if(!TerminalLauncher.open(pool.getHost(), folder)) {
-            dialogs.error(Messages.get("Open in Terminal"), Messages.get("No terminal program was found. Install one or set it in the preferences."));
+        final String failure = TerminalLauncher.open(pool.getHost(), folder);
+        if(failure != null) {
+            dialogs.error(Messages.get("Open in Terminal"), failure);
         }
     }
 

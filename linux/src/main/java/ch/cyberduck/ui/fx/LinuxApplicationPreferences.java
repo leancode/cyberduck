@@ -150,6 +150,9 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
         this.setDefault("queue.download.folder", Paths.get(userHome(), "Downloads").toString());
         // Same folder name as the bundled profiles unpacked next to the application resources
         this.setDefault("profiles.folder.name", "profiles");
+        // Problems of this version are reported to the repository of this version. The text is the version of the program.
+        this.setDefault("website.bug", "https://github.com/leancode/cyberduck-linux/issues/new?body=Version%20{0}");
+        this.setDefault("website.linux", "https://github.com/leancode/cyberduck-linux");
         this.setDefault("ssh.authentication.agent.enable", String.valueOf(false));
         this.setDefault("connection.ssl.securerandom.algorithm", "NativePRNGNonBlocking");
     }
