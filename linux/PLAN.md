@@ -1458,7 +1458,7 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   - `master` mirrors `iterate-ch/cyberduck`. Nobody commits to it. It is updated with the Sync fork button of GitHub.
   - `main` is the Linux line and the default branch. Upstream is merged in with `git merge master`. The workflow `linux-gui.yml` runs on pushes to `main` and on pull requests.
   - The code of the Linux version is in `linux/`. Changes outside it are kept few and small: `ftp/.../FTPFileType` and `FTPWriteFeature` (6.9), `defaults/.../default.properties`, `importer/.../FilezillaBookmarkCollection` (6.16), and the workflows.
-  - The repository is renamed `cyberduck-linux`. Done by the owner on GitHub: [ ] rename, [ ] default branch `main`, [ ] delete `cyberduck-linuxgui`, [ ] switch off the upstream workflows that this repository does not use.
+  - The repository is renamed `cyberduck-linux`. Done by the owner on GitHub: [x] rename (2026-10-08, old links redirect), [x] default branch `main`, [ ] delete `cyberduck-linuxgui` (still there on 2026-10-08), [ ] switch off the upstream workflows that this repository does not use. CI on `main` passed (run 24) with the new name.
   - [x] Licence headers: `LICENSE.txt` is GPL version 3. Upstream files have both headers (1918 files "version 2 or later", 1392 files "version 3 or later"), and the files of `linux/` have "version 3 or later". Nothing to change.
 
 - [ ] **7.2 First release**
