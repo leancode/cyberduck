@@ -1451,6 +1451,16 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   - [x] Core change for review: `importer/.../FilezillaBookmarkCollection` reset the port of a server to the default when it read the protocol, which comes after the port in the file of FileZilla, so every port that is not the default was lost. It keeps the port now. `importer` is a new dependency of the `linux` module.
   - [ ] Result of the CI run.
 
+- [x] **6.17 Yes items that were left: save password, looks** (A4, F5)
+
+  Done, proved by 128 unit tests and, for the settings, by the scenario `preferences` (it also ran locally):
+  - [x] Open Connection has "Save password in the keyring". It is available when a password is typed, off by default, and the password is stored once the login worked.
+  - [x] Dark theme: the windows were light even when the desktop was dark. `Theme` styles every window, also the dialogs that open later, as the system has it, and the Preferences, General tab has Appearance (as the system, light, dark) that applies at once (`linux.theme`). Looked at in a screenshot of the program in both themes. The system choice is read from the desktop session with the JavaFX preference for the colour scheme; it was only tested through the setting, because the test machine has no desktop that switches.
+  - [x] High resolution: the program at `GDK_SCALE=2` looks right (text, icons and columns scale together).
+  - [x] Found on the screenshots: the buttons under the bookmark list were cut to "…" and "Del…"; they stay whole now and go to a second line. The window starts at 1100 x 650 so that the path field is readable.
+  - [ ] Wayland: not tested, there is no Wayland session on the test machine. JavaFX uses GTK through XWayland. To be looked at on a desktop.
+  - [ ] Other protocols (A13): not done. Needs the list of the protocols that are used.
+
 ## Phase 7: Repository, releases and the offer to upstream (decided 2026-10-08)
 
 - [x] **7.1 Layout of the repository**
