@@ -3,9 +3,7 @@ name: Linux GUI
 on:
   push:
     branches:
-      - master
-      - 'dom/**'
-      - cyberduck-linuxgui
+      - main
   pull_request:
 
 concurrency:

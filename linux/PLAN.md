@@ -778,7 +778,7 @@ later publishes packages.
     display. (3) `xvfb-run -a linux/smoke.sh`.
   - Packages needed on the runner: `xvfb libgtk-3-0t64 libgl1 libxtst6` (JavaFX needs GTK 3 and OpenGL). Python 3, OpenSSL and
     Docker are already on `ubuntu-latest`, which `smoke.sh` needs for the TLS and SFTP scenarios.
-  - The push trigger covers `master`, `cyberduck-linuxgui` and `dom/**`. A new push to the same branch cancels the run in progress, so wait for a run to
+  - The push trigger covers `main`. A new push to the same branch cancels the run in progress, so wait for a run to
     finish before pushing again when you need its result.
   - Reading a run from the agent: `mcp__github__actions_list` (`list_workflow_runs`, `list_workflow_jobs`) and
     `mcp__github__get_job_logs` with `tail_lines`.
@@ -1451,6 +1451,24 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   - [x] Core change for review: `importer/.../FilezillaBookmarkCollection` reset the port of a server to the default when it read the protocol, which comes after the port in the file of FileZilla, so every port that is not the default was lost. It keeps the port now. `importer` is a new dependency of the `linux` module.
   - [ ] Result of the CI run.
 
+## Phase 7: Repository, releases and the offer to upstream (decided 2026-10-08)
+
+- [x] **7.1 Layout of the repository**
+
+  - `master` mirrors `iterate-ch/cyberduck`. Nobody commits to it. It is updated with the Sync fork button of GitHub.
+  - `main` is the Linux line and the default branch. Upstream is merged in with `git merge master`. The workflow `linux-gui.yml` runs on pushes to `main` and on pull requests.
+  - The code of the Linux version is in `linux/`. Changes outside it are kept few and small: `ftp/.../FTPFileType` and `FTPWriteFeature` (6.9), `defaults/.../default.properties`, `importer/.../FilezillaBookmarkCollection` (6.16), and the workflows.
+  - The repository is renamed `cyberduck-linux`. Done by the owner on GitHub: [ ] rename, [ ] default branch `main`, [ ] delete `cyberduck-linuxgui`, [ ] switch off the upstream workflows that this repository does not use.
+  - [x] Licence headers: `LICENSE.txt` is GPL version 3. Upstream files have both headers (1918 files "version 2 or later", 1392 files "version 3 or later"), and the files of `linux/` have "version 3 or later". Nothing to change.
+
+- [ ] **7.2 First release**
+
+  After the Yes items of 6.12 are done and tested again on a desktop: a pre-release tag such as `v9.6.0-linux.1` (upstream version plus the Linux build). It is the first real run of the release workflow (4.6). Until upstream agrees on the name, the packages are described as a community build, "Cyberduck for Linux (unofficial)", because "Cyberduck" is a trademark of iterate GmbH.
+
+- [ ] **7.3 Offer to upstream**
+
+  A branch from `master` with a few squashed commits (the history of `main` has about 60 commits and merges). The changes that help every platform go first as pull requests of their own: the FTP ASCII upload mode and the FileZilla port fix. Ask about the name in the same message.
+
 ---
 
 ## Appendix A: `linux/pom.xml` outline
@@ -1532,7 +1550,7 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
 name: Linux GUI
 on:
   push:
-    branches: [ master, cyberduck-linuxgui, 'dom/**' ]
+    branches: [ main ]
   pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
