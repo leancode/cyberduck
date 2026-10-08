@@ -31,6 +31,8 @@ import java.util.concurrent.TimeUnit;
 import javafx.application.Platform;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class InfoControllerTest {
@@ -74,5 +76,55 @@ public class InfoControllerTest {
         });
         assertEquals(-1L, info.getBytes());
         assertEquals("", info.getSize().getText());
+    }
+
+    @Test
+    public void testPermissionBoxesFollowTheOctalNumberAndBack() throws Exception {
+        final PathAttributes attributes = new DefaultPathAttributes();
+        attributes.setPermission(new StaticPermission(640));
+        final InfoController info = new InfoController(null, null, null, new Path("/home/alice/a.txt", EnumSet.of(Path.Type.file)));
+        onFx(() -> {
+            info.build();
+            info.update(attributes);
+            assertEquals("640", info.getOctal().getText());
+            assertTrue(info.getBit(0, 0).isSelected() && info.getBit(0, 1).isSelected() && !info.getBit(0, 2).isSelected());
+            assertTrue(info.getBit(1, 0).isSelected() && !info.getBit(1, 1).isSelected());
+            assertFalse(info.getBit(2, 0).isSelected());
+
+            info.getOctal().setText("755");
+            assertTrue(info.getBit(1, 0).isSelected() && !info.getBit(1, 1).isSelected() && info.getBit(1, 2).isSelected());
+            assertTrue(info.getBit(2, 0).isSelected() && info.getBit(2, 2).isSelected());
+
+            // A box that is clicked changes the number
+            // A disabled box ignores fire(), and without a protocol with permissions the editor is disabled
+            info.getBit(2, 1).setSelected(true);
+            info.getBit(2, 1).getOnAction().handle(new javafx.event.ActionEvent());
+            assertEquals("757", info.getOctal().getText());
+            assertEquals("rwxr-xrwx", info.entered().getSymbol());
+            return null;
+        });
+    }
+
+    @Test
+    public void testNotValidOctalNumberIsNotApplied() throws Exception {
+        final InfoController info = new InfoController(null, null, null, new Path("/a", EnumSet.of(Path.Type.file)));
+        onFx(() -> {
+            info.build();
+            info.getOctal().setText("789");
+            assertNull(info.entered());
+            info.getOctal().setText("64");
+            assertNull(info.entered());
+            return null;
+        });
+    }
+
+    @Test
+    public void testNothingToChangeWithoutAProtocolThatHasPermissions() throws Exception {
+        final InfoController info = new InfoController(null, null, null, new Path("/a", EnumSet.of(Path.Type.file)));
+        onFx(() -> {
+            info.build();
+            assertTrue(info.getApply().isDisabled());
+            return null;
+        });
     }
 }
