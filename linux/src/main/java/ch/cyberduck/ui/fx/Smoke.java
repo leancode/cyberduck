@@ -519,6 +519,30 @@ public final class Smoke {
         awaitAnswering("download", password, counts, () -> transfers.getCompleted() >= completed + 2);
         check("downloaded file is the same", -1 == java.nio.file.Files.mismatch(up, down.resolve("up.bin")));
 
+        // Compare: an unchanged file is skipped, a file that is older than the one on the server is fetched again
+        PreferencesFactory.get().setProperty("queue.download.action", TransferAction.comparison.name());
+        final java.nio.file.Path copy = down.resolve("up.bin");
+        final java.nio.file.attribute.FileTime remoteTime = java.nio.file.Files.getLastModifiedTime(copy);
+        final byte[] marker = new byte[512 * 1024];
+        marker[0] = 1;
+        java.nio.file.Files.write(copy, marker);
+        java.nio.file.Files.setLastModifiedTime(copy, remoteTime);
+        select(browser, "up.bin");
+        onFx(() -> {
+            browser.getDownloadButton().fire();
+            return null;
+        });
+        awaitAnswering("compare, same size and time", password, counts, () -> transfers.getCompleted() >= completed + 3);
+        check("a file with the same size and time is skipped", java.util.Arrays.equals(marker, java.nio.file.Files.readAllBytes(copy)));
+        java.nio.file.Files.setLastModifiedTime(copy, java.nio.file.attribute.FileTime.fromMillis(remoteTime.toMillis() - 3600_000L));
+        onFx(() -> {
+            browser.getDownloadButton().fire();
+            return null;
+        });
+        awaitAnswering("compare, older local file", password, counts, () -> transfers.getCompleted() >= completed + 4);
+        check("an older file is downloaded again", -1 == java.nio.file.Files.mismatch(up, copy));
+        PreferencesFactory.get().setProperty("queue.download.action", TransferAction.callback.name());
+
         // Rename, create a folder, delete both. Rename needs a second connection on a stateful protocol.
         select(browser, "up.bin");
         onFx(() -> {
