@@ -16,6 +16,7 @@ package ch.cyberduck.ui.fx;
  */
 
 import ch.cyberduck.core.Credentials;
+import ch.cyberduck.core.CredentialsConfiguratorFactory;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.LocalFactory;
 import ch.cyberduck.core.HostParser;
@@ -43,6 +44,21 @@ public final class HostBuilder {
      */
     public static Host fromUrl(final ProtocolFactory factory, final String url) throws HostParserException {
         return new HostParser(factory).get(StringUtils.trim(url));
+    }
+
+    /**
+     * Fill in what ssh would use without being told: the user and the key file from {@code ~/.ssh/config} and the
+     * default key files. Credentials are only checked for being complete, so a URL with a user name and no password
+     * would otherwise be tried without any key. Left alone if a password or a key was given.
+     *
+     * @return The same host
+     */
+    public static Host configure(final Host host) {
+        final Credentials credentials = host.getCredentials();
+        if(StringUtils.isNotBlank(host.getHostname()) && !credentials.isPasswordAuthentication() && !credentials.isPublicKeyAuthentication()) {
+            host.setCredentials(CredentialsConfiguratorFactory.get(host.getProtocol()).configure(host));
+        }
+        return host;
     }
 
     /**

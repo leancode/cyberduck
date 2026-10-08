@@ -1243,7 +1243,7 @@ public class BrowserController extends FxController {
      */
     void open(final String url) {
         try {
-            this.mount(HostBuilder.fromUrl(ProtocolFactory.get(), url));
+            this.mount(HostBuilder.configure(HostBuilder.fromUrl(ProtocolFactory.get(), url)));
         }
         catch(HostParserException e) {
             dialogs.error("Invalid URL", String.format("%s%n%n%s", url, e.getDetail()));
@@ -1255,7 +1255,7 @@ public class BrowserController extends FxController {
      */
     void connect() {
         connection = new ConnectionDialog(stage, ProtocolFactory.get());
-        connection.showAndWait().ifPresent(this::mount);
+        connection.showAndWait().map(HostBuilder::configure).ifPresent(this::mount);
     }
 
     /**

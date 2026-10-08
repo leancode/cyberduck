@@ -117,4 +117,26 @@ public class LinuxApplicationPreferencesTest {
         assertTrue(configured.isPublicKeyAuthentication());
         assertEquals(key.getAbsolutePath(), configured.getIdentity().getAbsolute());
     }
+
+    @Test
+    public void testQuickConnectWithoutPasswordUsesTheDefaultKey() throws Exception {
+        ch.cyberduck.core.preferences.PreferencesFactory.set(new LinuxApplicationPreferences(folder.getRoot().toPath().resolve("cyberduck.properties")));
+        final java.io.File key = folder.newFile("id_ed25519");
+        ch.cyberduck.core.preferences.PreferencesFactory.get().setProperty("ssh.authentication.publickey.default.rsa", key.getAbsolutePath());
+        final ch.cyberduck.core.ProtocolFactory protocols = new ch.cyberduck.core.ProtocolFactory(java.util.Collections.singleton(new ch.cyberduck.core.sftp.SFTPProtocol() {
+            @Override
+            public boolean isEnabled() {
+                return true;
+            }
+        }));
+        // The user name is given and no password: complete enough for the core not to look for a key
+        final ch.cyberduck.core.Host host = HostBuilder.configure(HostBuilder.fromUrl(protocols, "sftp://root@no-such-host.example.invalid:2222"));
+        assertEquals("root", host.getCredentials().getUsername());
+        assertTrue(host.getCredentials().isPublicKeyAuthentication());
+        assertEquals(key.getAbsolutePath(), host.getCredentials().getIdentity().getAbsolute());
+        // A password that was typed stays the only way
+        final ch.cyberduck.core.Host typed = HostBuilder.configure(HostBuilder.fromUrl(protocols, "sftp://root:secret@no-such-host.example.invalid"));
+        assertEquals(false, typed.getCredentials().isPublicKeyAuthentication());
+        assertEquals("secret", typed.getCredentials().getPassword());
+    }
 }
