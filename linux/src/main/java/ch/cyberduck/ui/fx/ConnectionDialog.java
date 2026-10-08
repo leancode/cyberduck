@@ -85,6 +85,7 @@ public class ConnectionDialog extends Dialog<Host> {
     private final Label transferModeLabel = new Label(Messages.get("Transfer Mode"));
     private final TitledPane more = new TitledPane();
     private final Label error = new Label();
+    private final Label note = new Label();
     private final ButtonType connect;
 
     private Host host;
@@ -267,6 +268,11 @@ public class ConnectionDialog extends Dialog<Host> {
         grid.add(more, 0, row++, 2, 1);
         error.setStyle("-fx-text-fill: red;");
         error.setWrapText(true);
+        note.setWrapText(true);
+        note.setMaxWidth(380);
+        note.setManaged(false);
+        note.setVisible(false);
+        grid.add(note, 0, row++, 2, 1);
         grid.add(error, 0, row, 2, 1);
         return grid;
     }
@@ -274,6 +280,10 @@ public class ConnectionDialog extends Dialog<Host> {
     /**
      * Apply the defaults and limits of the selected protocol to the fields
      */
+    Label getNote() {
+        return note;
+    }
+
     private void configure(final Protocol selected) {
         if(null == selected) {
             return;
@@ -285,6 +295,11 @@ public class ConnectionDialog extends Dialog<Host> {
         port.setText(selected.isPortConfigurable() ? String.valueOf(selected.getDefaultPort()) : StringUtils.EMPTY);
         username.setDisable(!selected.isUsernameConfigurable());
         password.setDisable(!selected.isPasswordConfigurable());
+        // Username and port are greyed out without a hint to why
+        final boolean oauth = StringUtils.isNotBlank(selected.getOAuthAuthorizationUrl()) && !selected.isUsernameConfigurable();
+        note.setText(oauth ? String.format(Messages.get("Click Connect to log in with %s in your web browser. No username or password is needed here."), selected.getName()) : StringUtils.EMPTY);
+        note.setManaged(oauth);
+        note.setVisible(oauth);
         path.setPromptText(StringUtils.defaultString(selected.getDefaultPath()));
         anonymous.setVisible(selected.isAnonymousConfigurable());
         anonymous.setManaged(selected.isAnonymousConfigurable());

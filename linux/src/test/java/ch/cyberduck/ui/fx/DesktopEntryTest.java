@@ -59,4 +59,13 @@ public class DesktopEntryTest {
         assertNull(DesktopEntry.parse("b.desktop", Arrays.asList("[Desktop Entry]", "Type=Link", "Name=B", "URL=https://example.net")));
         assertNull(DesktopEntry.parse("c.desktop", Arrays.asList("[Desktop Entry]", "Type=Application", "Name=No command")));
     }
+
+    @Test
+    public void testPackagedEntryHandlesTheLoginCallback() {
+        final DesktopEntry entry = DesktopEntry.parse(java.nio.file.Paths.get("..", "setup", "linux", "Cyberduck.desktop"));
+        // The web browser hands the answer of a login to the application through these
+        assertTrue(entry.getMimeTypes().contains("x-scheme-handler/io.cyberduck"));
+        assertTrue(entry.getMimeTypes().contains("x-scheme-handler/x-cyberduck-action"));
+        assertTrue(entry.getMimeTypes().contains("x-scheme-handler/sftp"));
+    }
 }

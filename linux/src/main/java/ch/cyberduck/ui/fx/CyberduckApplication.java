@@ -20,6 +20,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import javafx.animation.PauseTransition;
 import javafx.application.Application;
@@ -44,6 +46,34 @@ public class CyberduckApplication extends Application {
         Platform.runLater(Platform::exit);
     }
 
+    private static SingleInstance instance;
+
+    /**
+     * A later start of the application passes a URL or asks to come to the front. Returns when it has been dealt with.
+     */
+    private static void received(final String line) {
+        final CountDownLatch done = new CountDownLatch(1);
+        Platform.runLater(() -> {
+            try {
+                if(SingleInstance.ACTIVATE.equals(line)) {
+                    UrlHandler.front(MainController.get().getBrowsers().stream().findFirst().orElse(null));
+                }
+                else {
+                    UrlHandler.handle(line);
+                }
+            }
+            finally {
+                done.countDown();
+            }
+        });
+        try {
+            done.await(3, TimeUnit.SECONDS);
+        }
+        catch(InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     @Override
     public void init() {
         // Not on the JavaFX application thread
@@ -58,7 +88,11 @@ public class CyberduckApplication extends Application {
         final BrowserController browser = MainController.get().newBrowser(stage);
         final List<String> arguments = this.getParameters().getRaw();
         // The desktop starts the application with the URL that was clicked
-        arguments.stream().filter(argument -> argument.matches("^[A-Za-z][A-Za-z0-9+.-]*://.+")).findFirst().ifPresent(browser::open);
+        arguments.stream().filter(argument -> UrlHandler.isServer(argument) || UrlHandler.isCallback(argument)).forEach(UrlHandler::handle);
+        if(!arguments.contains("--smoke")) {
+            // Later starts pass their URL to this one
+            instance = SingleInstance.listen(SingleInstance.socket(), CyberduckApplication::received);
+        }
         final int exit = arguments.indexOf("--exit-after");
         if(exit >= 0 && exit + 1 < arguments.size()) {
             final double seconds = Double.parseDouble(arguments.get(exit + 1));

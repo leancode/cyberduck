@@ -67,6 +67,20 @@ public class FakeDialogService implements DialogService {
         return action;
     }
 
+    /**
+     * Called when the user gives up waiting
+     */
+    public Runnable cancelled;
+    public int closed;
+
+    @Override
+    public Runnable waiting(final String title, final String message, final Runnable cancel) {
+        titles.add(title);
+        messages.add(message);
+        cancelled = cancel;
+        return () -> closed++;
+    }
+
     @Override
     public void error(final String title, final String message) {
         errors.add(String.format("%s|%s", title, message));

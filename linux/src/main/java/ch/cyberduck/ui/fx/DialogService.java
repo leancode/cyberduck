@@ -73,6 +73,15 @@ public interface DialogService {
     void error(String title, String message);
 
     /**
+     * Show a notice while waiting for something outside of the application, such as the login in a web browser. Does
+     * not block.
+     *
+     * @param cancel Called if the user gives up waiting
+     * @return Closes the notice when what was waited for has arrived
+     */
+    Runnable waiting(String title, String message, Runnable cancel);
+
+    /**
      * @param accepted   True if the user chose to continue
      * @param suppressed True if the user asked never to be asked again
      */

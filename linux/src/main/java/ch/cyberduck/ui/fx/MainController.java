@@ -104,6 +104,8 @@ public final class MainController {
             transfers.stopAll();
         }
         quitting = true;
+        // A login that waits for the web browser would keep the connection from closing
+        FxLoginCallback.cancelAll();
         hideDialogs();
         final List<BrowserController> open = new ArrayList<>(browsers);
         if(open.isEmpty()) {

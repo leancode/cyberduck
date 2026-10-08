@@ -34,6 +34,10 @@ public final class MainApplication {
 
     public static void main(final String... args) {
         final List<String> arguments = Arrays.asList(args);
+        if(arguments.stream().noneMatch(argument -> argument.startsWith("--")) && SingleInstance.forward(SingleInstance.socket(), arguments)) {
+            // Already running. The links were passed on.
+            return;
+        }
         Bootstrap.initialize();
         if(arguments.contains("--version")) {
             System.out.printf("Cyberduck %s%n", Version.get());

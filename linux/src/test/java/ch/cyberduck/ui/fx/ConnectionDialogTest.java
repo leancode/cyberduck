@@ -89,6 +89,44 @@ public class ConnectionDialogTest {
     }
 
     @Test
+    public void testNoteExplainsWhyUsernameIsOffForCloudLogin() throws Exception {
+        final FTPProtocol drive = new FTPProtocol() {
+            @Override
+            public boolean isEnabled() {
+                return true;
+            }
+
+            @Override
+            public String getName() {
+                return "Google Drive";
+            }
+
+            @Override
+            public boolean isUsernameConfigurable() {
+                return false;
+            }
+
+            @Override
+            public String getOAuthAuthorizationUrl() {
+                return "https://accounts.example.net/auth";
+            }
+        };
+        onFx(() -> {
+            final ConnectionDialog dialog = new ConnectionDialog(null, ProtocolFactory.get());
+            dialog.getProtocolBox().setValue(sftp);
+            assertFalse(dialog.getNote().isVisible());
+            dialog.getProtocolBox().setValue(drive);
+            assertTrue(dialog.getNote().isVisible());
+            assertTrue(dialog.getNote().getText().contains("Google Drive"));
+            assertTrue(dialog.getUsernameField().isDisabled());
+            dialog.getProtocolBox().setValue(sftp);
+            assertFalse(dialog.getNote().isVisible());
+            assertFalse(dialog.getNote().isManaged());
+            return null;
+        });
+    }
+
+    @Test
     public void testAnonymousLoginTakesTheNameAndPassword() throws Exception {
         onFx(() -> {
             final ConnectionDialog dialog = new ConnectionDialog(null, ProtocolFactory.get());

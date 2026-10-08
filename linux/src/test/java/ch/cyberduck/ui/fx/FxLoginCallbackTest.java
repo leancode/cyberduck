@@ -24,6 +24,8 @@ import ch.cyberduck.core.sftp.SFTPProtocol;
 
 import org.junit.Test;
 
+import java.util.concurrent.CountDownLatch;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
@@ -89,5 +91,72 @@ public class FxLoginCallbackTest {
         assertEquals(1, dialogs.messages.size());
         PreferencesFactory.get().deleteProperty(preference);
         assertFalse(PreferencesFactory.get().getBoolean(preference));
+    }
+
+    @Test(timeout = 10000)
+    public void testAwaitEndsWhenTheAnswerArrives() throws Exception {
+        FxToolkit.init();
+        final FakeDialogService dialogs = new FakeDialogService();
+        final CountDownLatch signal = new CountDownLatch(1);
+        final FxLoginCallback callback = new FxLoginCallback(new FxController(), dialogs);
+        final Thread thread = new Thread(() -> callback.await(signal, host, "Login", "Open web browser"));
+        thread.start();
+        signal.countDown();
+        thread.join();
+        assertEquals("Login", dialogs.titles.get(0));
+        assertEquals(1, dialogs.closed);
+    }
+
+    @Test(timeout = 10000)
+    public void testAwaitEndsWhenTheUserGivesUp() throws Exception {
+        FxToolkit.init();
+        final FakeDialogService dialogs = new FakeDialogService();
+        final CountDownLatch signal = new CountDownLatch(1);
+        final FxLoginCallback callback = new FxLoginCallback(new FxController(), dialogs);
+        final Thread thread = new Thread(() -> callback.await(signal, host, "Login", "Open web browser"));
+        thread.start();
+        while(null == dialogs.cancelled) {
+            Thread.sleep(10);
+        }
+        dialogs.cancelled.run();
+        thread.join();
+        assertEquals(0, signal.getCount());
+    }
+
+    @Test(timeout = 10000)
+    public void testDisconnectingEndsTheWait() throws Exception {
+        FxToolkit.init();
+        final FakeDialogService dialogs = new FakeDialogService();
+        final CountDownLatch signal = new CountDownLatch(1);
+        final FxController controller = new FxController();
+        final FxLoginCallback callback = new FxLoginCallback(controller, dialogs);
+        final Thread thread = new Thread(() -> callback.await(signal, host, "Login", "Open web browser"));
+        thread.start();
+        while(null == dialogs.cancelled) {
+            Thread.sleep(10);
+        }
+        // Another window is not affected
+        FxLoginCallback.cancel(new FxController());
+        thread.join(200);
+        assertTrue(thread.isAlive());
+        FxLoginCallback.cancel(controller);
+        thread.join();
+        assertEquals(0, signal.getCount());
+    }
+
+    @Test(timeout = 10000)
+    public void testQuitEndsAllWaits() throws Exception {
+        FxToolkit.init();
+        final FakeDialogService dialogs = new FakeDialogService();
+        final CountDownLatch signal = new CountDownLatch(1);
+        final FxLoginCallback callback = new FxLoginCallback(new FxController(), dialogs);
+        final Thread thread = new Thread(() -> callback.await(signal, host, "Login", "Open web browser"));
+        thread.start();
+        while(null == dialogs.cancelled) {
+            Thread.sleep(10);
+        }
+        FxLoginCallback.cancelAll();
+        thread.join();
+        assertEquals(0, signal.getCount());
     }
 }

@@ -26,6 +26,11 @@ import ch.cyberduck.core.preferences.PreferencesFactory;
 
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -85,6 +90,54 @@ public class FxLoginCallback extends FxPasswordCallback implements LoginCallback
     @Override
     public void await(final CountDownLatch signal, final Host bookmark, final String title, final String message) {
         controller.message(message);
-        Uninterruptibles.awaitUninterruptibly(signal);
+        // Whoever gives up releases the signal without an answer, which ends the login as cancelled
+        final Runnable close = dialogs.waiting(title, message, signal::countDown);
+        synchronized(WAITING) {
+            WAITING.computeIfAbsent(controller, key -> new HashSet<>()).add(signal);
+        }
+        try {
+            Uninterruptibles.awaitUninterruptibly(signal);
+        }
+        finally {
+            synchronized(WAITING) {
+                final Set<CountDownLatch> signals = WAITING.get(controller);
+                if(signals != null) {
+                    signals.remove(signal);
+                    if(signals.isEmpty()) {
+                        WAITING.remove(controller);
+                    }
+                }
+            }
+            close.run();
+        }
+    }
+
+    /**
+     * Logins that wait for an answer from a web browser, by window
+     */
+    private static final Map<FxController, Set<CountDownLatch>> WAITING = new HashMap<>();
+
+    /**
+     * Stop waiting for the web browser. Needed to disconnect or to quit while a login waits.
+     *
+     * @param controller Window that waits
+     */
+    static void cancel(final FxController controller) {
+        final Set<CountDownLatch> signals;
+        synchronized(WAITING) {
+            signals = new HashSet<>(WAITING.getOrDefault(controller, Collections.emptySet()));
+        }
+        signals.forEach(CountDownLatch::countDown);
+    }
+
+    /**
+     * Stop waiting for the web browser in all windows
+     */
+    static void cancelAll() {
+        final Set<CountDownLatch> signals = new HashSet<>();
+        synchronized(WAITING) {
+            WAITING.values().forEach(signals::addAll);
+        }
+        signals.forEach(CountDownLatch::countDown);
     }
 }

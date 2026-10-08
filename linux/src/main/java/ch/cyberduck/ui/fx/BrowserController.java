@@ -1058,6 +1058,8 @@ public class BrowserController extends FxController {
      * @param disconnected Run after the connection has been closed
      */
     public void unmount(final Runnable disconnected) {
+        // A login that still waits for the web browser blocks the connection from closing
+        FxLoginCallback.cancel(this);
         if(!this.isMounted()) {
             disconnected.run();
             return;

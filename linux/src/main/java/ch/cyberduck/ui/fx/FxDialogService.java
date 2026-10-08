@@ -24,9 +24,11 @@ import ch.cyberduck.core.transfer.TransferAction;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonBar;
@@ -184,6 +186,41 @@ public class FxDialogService implements DialogService {
             alert.showAndWait();
             return null;
         });
+    }
+
+    @Override
+    public Runnable waiting(final String title, final String message, final Runnable cancel) {
+        final AtomicBoolean finished = new AtomicBoolean();
+        final AtomicReference<Alert> shown = new AtomicReference<>();
+        Platform.runLater(() -> {
+            if(finished.get()) {
+                return;
+            }
+            final ButtonType stop = new ButtonType(Messages.get("Cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
+            final Alert alert = new Alert(Alert.AlertType.INFORMATION, message, stop);
+            this.owner(alert);
+            alert.setTitle(title);
+            alert.setHeaderText(title);
+            alert.getDialogPane().setMinWidth(420);
+            // Closed by the user, as opposed to closed by what arrived
+            alert.setOnHidden(event -> {
+                if(!finished.getAndSet(true)) {
+                    cancel.run();
+                }
+            });
+            shown.set(alert);
+            alert.show();
+        });
+        return () -> {
+            if(!finished.getAndSet(true)) {
+                Platform.runLater(() -> {
+                    final Alert alert = shown.get();
+                    if(alert != null) {
+                        alert.hide();
+                    }
+                });
+            }
+        };
     }
 
     private javafx.scene.Node withCheckbox(final String message, final CheckBox checkbox) {
