@@ -1368,6 +1368,12 @@ public final class Smoke {
             window.getLanguage().getSelectionModel().select(1);
             check("a language is saved", !window.getLanguage().getValue().getValue().isEmpty());
             window.getLanguage().getSelectionModel().select(0);
+            // Dark windows at once, and back to the choice of the system
+            window.getTheme().getSelectionModel().select(2);
+            check("the window is dark", browser.getStage().getScene().getRoot().getStyle().contains("-fx-base"));
+            check("so is the window of the preferences", window.getStage().getScene().getRoot().getStyle().contains("-fx-base"));
+            window.getTheme().getSelectionModel().select(0);
+            check("the window is light again", !browser.getStage().getScene().getRoot().getStyle().contains("-fx-base"));
             window.getStage().close();
             return null;
         });

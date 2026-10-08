@@ -54,6 +54,7 @@ public class CyberduckApplication extends Application {
     public void start(final Stage stage) {
         // The application ends when the last browser window has been closed and everything has been saved
         Platform.setImplicitExit(false);
+        Theme.install();
         final BrowserController browser = MainController.get().newBrowser(stage);
         final List<String> arguments = this.getParameters().getRaw();
         // The desktop starts the application with the URL that was clicked
