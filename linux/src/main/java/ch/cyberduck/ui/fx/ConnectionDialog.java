@@ -18,12 +18,16 @@ package ch.cyberduck.ui.fx;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.ProtocolFactory;
+import ch.cyberduck.core.ftp.FTPFileType;
+import ch.cyberduck.core.ftp.FTPConnectMode;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.exception.HostParserException;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.List;
 
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
@@ -32,6 +36,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.TitledPane;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -58,6 +64,20 @@ public class ConnectionDialog extends Dialog<Host> {
     private final TextField username = new TextField();
     private final PasswordField password = new PasswordField();
     private final TextField path = new TextField();
+    private final CheckBox anonymous = new CheckBox(Messages.get("Anonymous Login"));
+    /**
+     * Character sets for the names of files. The empty text stands for the default of the preferences.
+     */
+    static final List<String> ENCODINGS = List.of("", "UTF-8", "ISO-8859-1", "ISO-8859-2", "ISO-8859-5", "ISO-8859-7", "ISO-8859-9",
+        "ISO-8859-15", "windows-1250", "windows-1251", "windows-1252", "windows-1253", "windows-1254", "Shift_JIS", "EUC-JP", "ISO-2022-JP",
+        "GBK", "GB18030", "Big5", "EUC-KR", "KOI8-R", "UTF-16");
+    private final ComboBox<String> encoding = new ComboBox<>();
+    private final ComboBox<FTPConnectMode> connectMode = new ComboBox<>();
+    private final ComboBox<PreferencesController.Choice> transferMode = new ComboBox<>();
+    private final Label encodingLabel = new Label(Messages.get("Encoding"));
+    private final Label connectModeLabel = new Label(Messages.get("Connect Mode"));
+    private final Label transferModeLabel = new Label(Messages.get("Transfer Mode"));
+    private final TitledPane more = new TitledPane();
     private final Label error = new Label();
     private final ButtonType connect;
 
@@ -90,6 +110,8 @@ public class ConnectionDialog extends Dialog<Host> {
             try {
                 host = HostBuilder.fromFields(protocols, protocol.getValue(), server.getText(), port.getText(),
                     username.getText(), password.getText(), path.getText());
+                HostBuilder.options(host, anonymous.isSelected(), encoding.getValue(), connectMode.getValue(),
+                    null == transferMode.getValue() ? null : transferMode.getValue().getValue());
                 if(bookmark) {
                     host.setNickname(StringUtils.trimToNull(nickname.getText()));
                 }
@@ -102,6 +124,34 @@ public class ConnectionDialog extends Dialog<Host> {
             }
         });
         this.setResultConverter(type -> type == connect ? host : null);
+        encoding.getItems().setAll(ENCODINGS);
+        final javafx.util.Callback<javafx.scene.control.ListView<String>, ListCell<String>> encodings = list -> new ListCell<>() {
+            @Override
+            protected void updateItem(final String item, final boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || null == item ? null : item.isEmpty()
+                    ? String.format("%s (%s)", Messages.get("Default"), PreferencesFactory.get().getProperty("browser.charset.encoding")) : item);
+            }
+        };
+        encoding.setCellFactory(encodings);
+        encoding.setButtonCell(encodings.call(null));
+        encoding.setValue("");
+        connectMode.getItems().setAll(FTPConnectMode.values());
+        connectMode.setValue(FTPConnectMode.unknown);
+        transferMode.getItems().setAll(
+            new PreferencesController.Choice("", String.format("%s (%s)", Messages.get("Default"), StringUtils.defaultIfBlank(PreferencesFactory.get().getProperty(FTPFileType.MODE), FTPFileType.BINARY))),
+            new PreferencesController.Choice(FTPFileType.BINARY, Messages.get("Binary")),
+            new PreferencesController.Choice(FTPFileType.ASCII, Messages.get("ASCII")),
+            new PreferencesController.Choice(FTPFileType.AUTO, Messages.get("Auto (by file type)")));
+        transferMode.setValue(transferMode.getItems().get(0));
+        anonymous.selectedProperty().addListener((observable, previous, selected) -> {
+            username.setDisable(selected || !protocol.getValue().isUsernameConfigurable());
+            password.setDisable(selected || !protocol.getValue().isPasswordConfigurable());
+            if(selected) {
+                username.setText(StringUtils.EMPTY);
+                password.setText(StringUtils.EMPTY);
+            }
+        });
         protocol.getItems().setAll(protocols.find());
         protocol.setCellFactory(list -> new ProtocolCell());
         protocol.setButtonCell(new ProtocolCell());
@@ -127,6 +177,15 @@ public class ConnectionDialog extends Dialog<Host> {
         username.setText(StringUtils.defaultString(initial.getCredentials().getUsername()));
         path.setText(StringUtils.defaultString(initial.getDefaultPath()));
         nickname.setText(StringUtils.defaultString(initial.getNickname()));
+        anonymous.setSelected(initial.getProtocol().isAnonymousConfigurable() && initial.getCredentials().isAnonymousLogin());
+        final String charset = initial.getEncoding();
+        encoding.setValue(null == charset || charset.equals(PreferencesFactory.get().getProperty("browser.charset.encoding")) ? "" : charset);
+        if(initial.getProtocol().getType() == Protocol.Type.ftp) {
+            connectMode.setValue(initial.getFTPConnectMode());
+            final String mode = initial.getProperty(FTPFileType.MODE);
+            transferMode.setValue(transferMode.getItems().stream().filter(c -> c.getValue().equals(StringUtils.defaultString(mode))).findFirst()
+                .orElse(transferMode.getItems().get(0)));
+        }
     }
 
     private GridPane build() {
@@ -153,7 +212,24 @@ public class ConnectionDialog extends Dialog<Host> {
             // A bookmark stores no password
             grid.addRow(row++, new Label(Messages.get("Password")), password);
         }
+        grid.add(anonymous, 1, row++);
         grid.addRow(row++, new Label(Messages.get("Path")), path);
+        // Settings of a protocol that most connections do not need
+        final GridPane options = new GridPane();
+        options.setHgap(8);
+        options.setVgap(8);
+        options.setPadding(new Insets(8));
+        options.addRow(0, encodingLabel, encoding);
+        options.addRow(1, connectModeLabel, connectMode);
+        options.addRow(2, transferModeLabel, transferMode);
+        encoding.setMaxWidth(Double.MAX_VALUE);
+        connectMode.setMaxWidth(Double.MAX_VALUE);
+        transferMode.setMaxWidth(Double.MAX_VALUE);
+        GridPane.setHgrow(encoding, Priority.ALWAYS);
+        more.setText(Messages.get("More Options"));
+        more.setContent(options);
+        more.setExpanded(false);
+        grid.add(more, 0, row++, 2, 1);
         error.setStyle("-fx-text-fill: red;");
         error.setWrapText(true);
         grid.add(error, 0, row, 2, 1);
@@ -175,7 +251,41 @@ public class ConnectionDialog extends Dialog<Host> {
         username.setDisable(!selected.isUsernameConfigurable());
         password.setDisable(!selected.isPasswordConfigurable());
         path.setPromptText(StringUtils.defaultString(selected.getDefaultPath()));
+        anonymous.setVisible(selected.isAnonymousConfigurable());
+        anonymous.setManaged(selected.isAnonymousConfigurable());
+        anonymous.setSelected(false);
+        final boolean ftp = selected.getType() == Protocol.Type.ftp;
+        for(javafx.scene.Node node : List.of(encodingLabel, encoding)) {
+            node.setVisible(selected.isEncodingConfigurable());
+            node.setManaged(selected.isEncodingConfigurable());
+        }
+        for(javafx.scene.Node node : List.of(connectModeLabel, connectMode, transferModeLabel, transferMode)) {
+            node.setVisible(ftp);
+            node.setManaged(ftp);
+        }
+        more.setVisible(selected.isEncodingConfigurable() || ftp);
+        more.setManaged(selected.isEncodingConfigurable() || ftp);
         error.setText(StringUtils.EMPTY);
+    }
+
+    CheckBox getAnonymousBox() {
+        return anonymous;
+    }
+
+    ComboBox<String> getEncodingBox() {
+        return encoding;
+    }
+
+    ComboBox<FTPConnectMode> getConnectModeBox() {
+        return connectMode;
+    }
+
+    ComboBox<PreferencesController.Choice> getTransferModeBox() {
+        return transferMode;
+    }
+
+    TitledPane getMore() {
+        return more;
     }
 
     TextField getNicknameField() {

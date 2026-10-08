@@ -8,10 +8,12 @@ bin="${CYBERDUCK_BIN:-linux/run.sh}"
 work="$(mktemp -d)"
 pids=""
 container=""
+ftp_container=""
 cleanup() {
     # shellcheck disable=SC2086
     [ -z "$pids" ] || kill $pids 2>/dev/null
     [ -z "$container" ] || docker rm -f "$container" >/dev/null 2>&1
+    [ -z "$ftp_container" ] || docker rm -f "$ftp_container" >/dev/null 2>&1
     rm -rf "$work"
 }
 trap cleanup EXIT
@@ -168,8 +170,27 @@ if docker info >/dev/null 2>&1; then
     done
     mkdir -p "$work/sftp"
     smoke '^SMOKE OK sftp$' sftp 127.0.0.1 "$sftp_port" foo pass "$work/sftp"
+    # FTP with a bookmark that sends text as ASCII and the rest as binary. The data connection of the server is on fixed
+    # ports, because the server tells them to the client.
+    ftp_image="${CYBERDUCK_SMOKE_FTP_IMAGE:-delfer/alpine-ftp-server}"
+    if ftp_container="$(docker run -d --rm -p 127.0.0.1:2121:21 -p 127.0.0.1:21000-21010:21000-21010 -e ADDRESS=127.0.0.1 -e USERS="foo|pass|/ftp/foo" "$ftp_image" 2>/dev/null)"; then
+        for _ in $(seq 1 50); do
+            timeout 3 bash -c "exec 3<>/dev/tcp/127.0.0.1/2121; read -t 2 line <&3; [[ \$line == 220* ]]" 2>/dev/null && break
+            sleep 0.5
+        done
+        mkdir -p "$work/ftp" "$work/home-ftp/.duck"
+        cp "$HOME/.duck/cyberduck.properties" "$work/home-ftp/.duck/cyberduck.properties"
+        printf 'line one\nline two\n' > "$work/ftp/text.txt"
+        printf 'bin one\nbin two\n' > "$work/ftp/data.bin"
+        HOME="$work/home-ftp" smoke '^SMOKE OK ftp uploaded=2$' ftp 127.0.0.1 2121 foo pass "$work/ftp"
+        # 18 bytes with line feeds became 20 bytes with carriage returns, and the binary file is as it was
+        [ "$(docker exec "$ftp_container" stat -c %s /ftp/foo/text.txt)" = 20 ] || fail "ftp: the text file was not sent as ASCII"
+        [ "$(docker exec "$ftp_container" stat -c %s /ftp/foo/data.bin)" = 16 ] || fail "ftp: the binary file was changed"
+    else
+        echo "skip ftp (could not start $ftp_image)"
+    fi
 else
-    echo "skip sftp (Docker is not available)"
+    echo "skip sftp and ftp (Docker is not available)"
 fi
 
 smoke '^SMOKE OK url 3$' url "$work/list"

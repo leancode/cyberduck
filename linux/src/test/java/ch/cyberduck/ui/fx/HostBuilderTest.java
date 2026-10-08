@@ -108,4 +108,64 @@ public class HostBuilderTest {
         assertEquals(local.getDefaultHostname(), host.getHostname());
         assertEquals("/tmp", host.getDefaultPath());
     }
+
+    private final ch.cyberduck.core.ftp.FTPProtocol ftp = new ch.cyberduck.core.ftp.FTPProtocol() {
+        @Override
+        public boolean isEnabled() {
+            return true;
+        }
+    };
+
+    @org.junit.Before
+    public void preferences() throws Exception {
+        ch.cyberduck.core.preferences.PreferencesFactory.set(new LinuxApplicationPreferences(java.nio.file.Files.createTempDirectory("hostbuilder").resolve("cyberduck.properties")));
+    }
+
+    @Test
+    public void testAnonymousLogin() {
+        final Host host = new Host(ftp, "example.net");
+        HostBuilder.options(host, true, null, null, null);
+        assertEquals("anonymous", host.getCredentials().getUsername());
+        assertEquals(true, host.getCredentials().isAnonymousLogin());
+        // Not for a protocol that has no anonymous login
+        final Host sftp = new Host(this.sftp, "example.net");
+        sftp.getCredentials().setUsername("alice");
+        HostBuilder.options(sftp, true, null, null, null);
+        assertEquals("alice", sftp.getCredentials().getUsername());
+    }
+
+    @Test
+    public void testFtpOptions() {
+        final Host host = new Host(ftp, "example.net");
+        HostBuilder.options(host, false, "ISO-8859-1", ch.cyberduck.core.ftp.FTPConnectMode.active, "ascii");
+        assertEquals("ISO-8859-1", host.getEncoding());
+        assertEquals(ch.cyberduck.core.ftp.FTPConnectMode.active, host.getFTPConnectMode());
+        assertEquals("ascii", host.getProperty(ch.cyberduck.core.ftp.FTPFileType.MODE));
+        // Blank takes the default again
+        HostBuilder.options(host, false, null, ch.cyberduck.core.ftp.FTPConnectMode.unknown, "");
+        assertEquals(null, host.getProperty(ch.cyberduck.core.ftp.FTPFileType.MODE));
+    }
+
+    @Test
+    public void testOptionsOfFtpDoNotApplyToOtherProtocols() {
+        final Host host = new Host(sftp, "example.net");
+        HostBuilder.options(host, false, null, ch.cyberduck.core.ftp.FTPConnectMode.active, "ascii");
+        assertEquals(null, host.getProperty(ch.cyberduck.core.ftp.FTPFileType.MODE));
+        assertEquals(ch.cyberduck.core.ftp.FTPConnectMode.unknown, host.getFTPConnectMode());
+    }
+
+    @Test
+    public void testCopyKeepsAndClearsTheOptions() {
+        final Host edited = new Host(ftp, "example.net");
+        HostBuilder.options(edited, false, "windows-1252", ch.cyberduck.core.ftp.FTPConnectMode.passive, "auto");
+        final Host stored = new Host(ftp, "example.net");
+        HostBuilder.copy(edited, stored);
+        assertEquals("windows-1252", stored.getEncoding());
+        assertEquals(ch.cyberduck.core.ftp.FTPConnectMode.passive, stored.getFTPConnectMode());
+        assertEquals("auto", stored.getProperty(ch.cyberduck.core.ftp.FTPFileType.MODE));
+        // Edited back to the default
+        HostBuilder.copy(new Host(ftp, "example.net"), stored);
+        assertEquals(null, stored.getProperty(ch.cyberduck.core.ftp.FTPFileType.MODE));
+        assertEquals(ch.cyberduck.core.ftp.FTPConnectMode.unknown, stored.getFTPConnectMode());
+    }
 }

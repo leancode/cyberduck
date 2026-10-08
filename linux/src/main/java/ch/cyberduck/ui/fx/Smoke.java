@@ -114,6 +114,9 @@ public final class Smoke {
                 case "duplicate":
                     System.out.println(duplicate(browser, arguments.get(1)));
                     return 0;
+                case "ftp":
+                    System.out.println(ftp(browser, arguments.get(1), arguments.get(2), arguments.get(3), arguments.get(4), arguments.get(5)));
+                    return 0;
                 case "compare":
                     System.out.println(compare(browser, arguments.get(1), arguments.get(2), arguments.get(3), arguments.get(4)));
                     return 0;
@@ -449,6 +452,10 @@ public final class Smoke {
                     ((javafx.scene.control.PasswordField) pane.lookup(".password-field")).setText(password);
                     ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
                     return "password";
+                }
+                if(header.contains("Unsecured")) {
+                    ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
+                    return "unsecured";
                 }
                 if(header.contains("fingerprint")) {
                     ((javafx.scene.control.Button) pane.lookupButton(pane.getButtonTypes().get(0))).fire();
@@ -1490,5 +1497,71 @@ public final class Smoke {
         check("the second run compares f.txt too: " + lines, local.toString().equals(lines.get(2)));
         check("the file on this computer is still the local one", "local content".equals(content(local)));
         return "SMOKE OK compare launched=2 downloaded=g.txt";
+    }
+
+    /**
+     * An FTP bookmark that transfers the files as ASCII or binary by their type. A text file and a binary file both have
+     * line feeds. The server must have the text file with carriage returns and line feeds and the other one as it was.
+     * Then the text file is downloaded again, as it is on the server.
+     *
+     * @param workdir Folder on this computer with text.txt and data.bin
+     */
+    private static String ftp(final BrowserController browser, final String host, final String port, final String user, final String password, final String workdir) throws Exception {
+        final java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
+        final java.nio.file.Path work = java.nio.file.Paths.get(workdir);
+        final BookmarkController bookmarks = browser.getBookmarks();
+        final TransferController transfers = TransferController.get();
+
+        onFx(() -> {
+            Platform.runLater(bookmarks::add);
+            return null;
+        });
+        await("bookmark dialog", () -> onFx(() -> null != bookmarks.getDialog() && bookmarks.getDialog().isShowing()));
+        onFx(() -> {
+            final ConnectionDialog dialog = bookmarks.getDialog();
+            dialog.getNicknameField().setText("FTP test");
+            dialog.getProtocolBox().setValue(ProtocolFactory.get().forName("ftp"));
+            dialog.getServerField().setText(host);
+            dialog.getPortField().setText(port);
+            dialog.getUsernameField().setText(user);
+            check("the anonymous option is offered for FTP", dialog.getAnonymousBox().isVisible());
+            check("so are the options of FTP", dialog.getMore().isVisible() && dialog.getTransferModeBox().isVisible() && dialog.getConnectModeBox().isVisible());
+            dialog.getEncodingBox().setValue("ISO-8859-1");
+            dialog.getConnectModeBox().setValue(ch.cyberduck.core.ftp.FTPConnectMode.passive);
+            dialog.getTransferModeBox().setValue(dialog.getTransferModeBox().getItems().stream().filter(c -> "auto".equals(c.getValue())).findFirst().orElseThrow());
+            dialog.getConnectButton().fire();
+            return null;
+        });
+        await("bookmark saved", () -> onFx(() -> 1 == bookmarks.getList().getItems().size()));
+        final Host bookmark = onFx(() -> bookmarks.getList().getItems().get(0));
+        check("the transfer mode is kept in the bookmark", "auto".equals(bookmark.getProperty(ch.cyberduck.core.ftp.FTPFileType.MODE)));
+        check("so are the character set and the connect mode", "ISO-8859-1".equals(bookmark.getEncoding()) && ch.cyberduck.core.ftp.FTPConnectMode.passive == bookmark.getFTPConnectMode());
+
+        onFx(() -> {
+            bookmarks.getList().getSelectionModel().select(bookmark);
+            bookmarks.connect();
+            return null;
+        });
+        awaitAnswering("listing after connecting", password, counts, () -> onFx(() -> null != browser.getRendered()));
+
+        final int completed = transfers.getCompleted();
+        onFx(() -> {
+            browser.upload(List.of(work.resolve("text.txt").toFile(), work.resolve("data.bin").toFile()));
+            return null;
+        });
+        awaitAnswering("upload", password, counts, () -> transfers.getCompleted() >= completed + 1);
+        awaitAnswering("uploaded files shown", password, counts, () -> names(browser).containsAll(List.of("text.txt", "data.bin")));
+
+        // Downloads stay binary: the carriage returns that the server has are still there, and the transfer is complete
+        final java.nio.file.Path down = java.nio.file.Files.createDirectories(work.resolve("down"));
+        PreferencesFactory.get().setProperty("queue.download.folder", down.toString());
+        select(browser, "text.txt");
+        onFx(() -> {
+            browser.getDownloadButton().fire();
+            return null;
+        });
+        awaitAnswering("download", password, counts, () -> transfers.getCompleted() >= completed + 2);
+        check("the text file has the line breaks of the server", "line one\r\nline two\r\n".equals(new String(java.nio.file.Files.readAllBytes(down.resolve("text.txt")), java.nio.charset.StandardCharsets.UTF_8)));
+        return "SMOKE OK ftp uploaded=2";
     }
 }
