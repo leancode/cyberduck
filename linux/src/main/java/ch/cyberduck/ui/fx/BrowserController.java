@@ -119,6 +119,9 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.input.DragEvent;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCombination;
@@ -276,6 +279,8 @@ public class BrowserController extends FxController {
                     this.showMenu(rowMenu, row.getItem(), event);
                 }
             });
+            // The files that are dragged out are downloaded while they are on their way
+            row.setOnDragDetected(event -> this.dragOut(event, row));
             // Files dropped on a folder go into the folder
             row.setOnDragOver(event -> this.acceptDrag(event));
             row.setOnDragDropped(event -> this.drop(event, !row.isEmpty() && row.getItem().isDirectory() ? row.getItem() : null));
@@ -1171,6 +1176,47 @@ public class BrowserController extends FxController {
         }
         log.debug("Upload {} to {}", uploads, destination);
         this.transfer(new UploadTransfer(host, uploads));
+    }
+
+    /**
+     * Start dragging the selected files and folders to another application, such as the file manager. They are
+     * downloaded to a place of their own and become available when they are complete.
+     */
+    private void dragOut(final MouseEvent event, final TableRow<Path> row) {
+        if(!this.isMounted() || row.isEmpty()) {
+            return;
+        }
+        if(!row.isSelected()) {
+            table.getSelectionModel().clearAndSelect(row.getIndex());
+        }
+        final List<Path> selected = new ArrayList<>(table.getSelectionModel().getSelectedItems());
+        final DragStaging.Batch batch;
+        try {
+            batch = DragStaging.create();
+        }
+        catch(IOException e) {
+            log.warn("Failure preparing to drag {}. {}", selected, e.getMessage());
+            return;
+        }
+        final List<TransferItem> items = new ArrayList<>();
+        final List<File> files = new ArrayList<>();
+        final List<String> names = new ArrayList<>();
+        for(Path file : selected) {
+            items.add(new TransferItem(file, LocalFactory.get(batch.work(file.getName()).toString())));
+            files.add(batch.ready(file.getName()).toFile());
+            names.add(file.getName());
+        }
+        final Dragboard board = row.startDragAndDrop(TransferMode.COPY);
+        final ClipboardContent content = new ClipboardContent();
+        content.putFiles(files);
+        board.setContent(content);
+        log.debug("Drag {} out as {}", selected, files);
+        TransferController.get().start(new DownloadTransfer(pool.getHost(), items), new TransferOptions(), this, completed -> {
+            if(completed.isComplete()) {
+                batch.publish(names);
+            }
+        });
+        event.consume();
     }
 
     private void acceptDrag(final DragEvent event) {

@@ -124,6 +124,16 @@ printf '#!/bin/sh\nprintf "%%s\\n%%s\\n" "$1" "$2" >> "%s/cmp-log.txt"\n' "$work
 chmod +x "$work/cmp-tool.sh"
 HOME="$work/home-vault" smoke '^SMOKE OK compare launched=2 downloaded=g.txt$' compare "$work/cmp-remote" "$work/cmp-down" "$work/cmp-tool.sh" "$work/cmp-log.txt"
 
+# Drag a file and a folder out of the listing with the mouse into another window. Needs xdotool for the mouse.
+if command -v xdotool >/dev/null 2>&1; then
+    mkdir -p "$work/drag/d"
+    printf 'dragged content' > "$work/drag/f.txt"
+    printf 'inner content' > "$work/drag/d/inner.txt"
+    HOME="$work/home-vault" smoke '^SMOKE OK dragout f.txt=ok d=ok$' dragout "$work/drag"
+else
+    echo "skip dragout (xdotool is not installed)"
+fi
+
 # The menus of the right mouse button on a file, a folder and the empty area
 mkdir -p "$work/ctx/sub" && echo x > "$work/ctx/f.txt"
 smoke '^SMOKE OK context file=[0-9]+ folder=[0-9]+ empty=[0-9]+$' context "$work/ctx"
