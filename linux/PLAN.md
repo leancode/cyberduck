@@ -1492,6 +1492,10 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   The workflow `linux-release.yml` starts when a run of `Linux GUI` on `main` ends well, builds that commit for x64 and arm64 and creates a release `linux-v<version>` (the version is the one in the name of the package, the build number is the number of commits), marked as the latest release, with the deb, the rpm and `SHA256SUMS`. A tag `v*-linux.*` still makes a pre-release for a named version. A run that failed makes no release. A release that exists is not made twice. Releases are not removed by the workflow; if the list gets long, old ones can be deleted by hand or a rule added.
   - [ ] The first release made by the workflow.
 
+- [x] **7.2c Version numbers go up with every build**
+
+  The workflow `linux-gui.yml` built with `-Drevision=0`, so its packages were all `9.6.0.0`, while the packages of the release workflow are `9.6.0.<number of commits>`. On 2026-10-08 the Package Installer of Linux Mint refused a `9.6.0.0` package with "A later version is already installed", because a package of the release dry run was installed. Both workflows now build with the number of commits, so a newer commit is always a newer version.
+
 - [ ] **7.2 First release**
 
   After the Yes items of 6.12 are done and tested again on a desktop: a pre-release tag such as `v9.6.0-linux.1` (upstream version plus the Linux build). It is the first real run of the release workflow (4.6). Until upstream agrees on the name, the packages are described as a community build, "Cyberduck for Linux (unofficial)", because "Cyberduck" is a trademark of iterate GmbH.
