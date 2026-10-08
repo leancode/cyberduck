@@ -727,6 +727,12 @@ of a hang on failure.
   - Environment facts that matter for the next steps: JDK 25 comes from `apt-get install openjdk-25-jdk` on Ubuntu 24.04 and
     `xvfb`, `x11-utils` and `imagemagick` help with screenshots. Total time of `xvfb-run -a linux/smoke.sh` is about one minute.
 
+  - **Update 2026-10-08, acceptance by a person.** The owner installed the `.deb` from CI run 16 on a Linux desktop (the title
+    bars in the screenshots look like Cinnamon) and used it against their own SFTP server. Reported working: connect and list (screenshots in `linux/screenshots`), download
+    with the transfers window, dropping files into the browser to upload, Cryptomator vaults (create, unlock), the preferences
+    window. This closes the "recommended human walk-through" above for the paths that were used. Not walked through yet: the
+    other protocols (only SFTP was used), the Flatpak and the `.rpm`.
+
 **Gate**: all boxes in Phase 1 and Phase 2 ticked. Only then continue.
 
 ---
@@ -1143,13 +1149,12 @@ later publishes packages.
   the content. One unit test covers the wording and the choices of the sync prompt. Because a finished transfer stays in
   the list of transfers of the next start, `smoke.sh` runs the vault and sync scenarios in a home of their own. The
   download scenario counts the transfers in the list and failed when they shared one.
-- [ ] **5.8 Drag and drop**: drop files from the desktop onto the browser to upload. Proof: manual.
-  **Executor note (not ticked)**: implemented, proof still open. The table and its rows accept files dragged from the
+- [x] **5.8 Drag and drop**: drop files from the desktop onto the browser to upload. Proof: manual.
+  **Executor note**: implemented. The manual proof was done by the owner on 2026-10-08 ("dropping in works", see step 2.12). Details of the implementation: The table and its rows accept files dragged from the
   desktop (`TransferMode.COPY`) while connected. A drop on a folder row uploads into that folder, a drop anywhere else
   uploads into the folder that is shown, both through the same `upload` that the Upload button uses (its smoke scenario
   passes). A drop cannot be made from outside the toolkit, because a `Dragboard` can only be created by a real drag
-  gesture. So the plan's manual proof is still to do: drag a file from the file manager onto the window and onto a folder
-  row and see the transfer.
+  gesture, which is why the proof was manual. Dragging out of the browser is step 6.10.
 - [ ] **5.9 Flatpak manifest** under `setup/flatpak/` built from the app image. Proof:
   `flatpak-builder` succeeds locally and `flatpak run io.cyberduck --version` prints the version.
   **Executor note (not ticked)**: written, not built. `setup/flatpak/` has the manifest `io.cyberduck.Cyberduck.yml`
@@ -1164,6 +1169,124 @@ later publishes packages.
   passwords go to the credentials file and there are no notifications until libsecret and libnotify are added or the
   portals are used.
 - [ ] **5.10 Add `linux-gui.yml` smoke suite to branch protection** as a required check (operator action).
+
+---
+
+## Phase 6: Feedback from the first test on a desktop (2026-10-08)
+
+The owner installed the package from the CI runs 8 and 16 and tested it. Everything that worked and every wish that came out of it is
+recorded here, one step each, with what was done and how it was proven. All steps were done on 2026-10-08. The unit tests of
+the module are 108 (1 skipped without a keyring) and every scenario named below is in `linux/smoke.sh`.
+
+- [x] **6.1 Toolbar labels and screenshots**
+
+  **Request**: at the default window size the labels of the toolbar buttons were cut ("Bookm...", "Con...").
+  **Done**: every button keeps its full width, the path field gives way, and the window cannot be narrower than its toolbar
+  (never wider than the screen). The three screenshots of the owner are in `linux/screenshots` and shown in `README.md`.
+  **Proof**: a screenshot under Xvfb shows all labels, in English and in German.
+
+- [x] **6.2 The local disk is called a local disk**
+
+  **Request**: "Is this supposed to be local?" about a default protocol named like the computer.
+  **Done**: yes. The core names the local protocol after the computer, as the macOS application does. Lists of protocols (connection
+  dialog, preferences) now show `Local Disk (hostname)`. `Messages.protocol`.
+  **Proof**: `MessagesTest.testLocalDiskIsNotNamedAfterTheComputerAlone`.
+
+- [x] **6.3 Arrow icons for Back and Up**
+
+  **Request**: icons like the original GUI instead of the words.
+  **Done**: `Icons` draws a left and an up triangle as shapes that follow the theme colour. The buttons have tooltips and
+  accessible text. Back is greyed while there is no history.
+  **Proof**: screenshot. The smoke scenarios still use the same buttons (`navigate`).
+
+- [x] **6.4 Menus of the right mouse button**
+
+  **Request**: a menu on files with download, info and edit, and for the empty area an upload picker.
+  **Done**: a right click selects the row like a file manager and shows Open, Download, Edit, Edit With, Compare, Get Info,
+  Rename, Duplicate, Delete, Unlock/Lock Vault (folders only), Synchronize, New Folder, Upload and Refresh. The empty area
+  shows Upload, New Folder, Refresh, Synchronize and Create Vault. Edit, Edit With and Compare appear for files only.
+  **Proof**: smoke `context` fires the menu on a file, a folder and the empty area, checks the items, opens the info window from
+  the menu and creates a folder from the menu of the empty area.
+
+- [x] **6.5 Change permissions in the info window**
+
+  **Request**: at minimum change the permissions.
+  **Done**: the info window has boxes for read, write and execute of owner, group and others, an octal field that follows the
+  boxes both ways, Apply, and for folders "Apply changes to enclosed items". It works through the `UnixPermission` feature and core's
+  `WritePermissionWorker`, so it is disabled for protocols without permissions. Special bits (setuid, sticky) are not kept.
+  **Proof**: 3 unit tests (boxes and number, invalid numbers, disabled without the feature) and smoke `chmod`: boxes to 600,
+  octal 664 and a folder with its contents to 700, each checked on the disk.
+
+- [x] **6.6 Edit files with an external program**
+
+  **Request**: edit from the listing, with a default editor and editors by file type.
+  **Done**: Edit (Ctrl+E and the menus) downloads the file, opens it, watches it and uploads the changes when it is saved, through
+  core's editor framework. The Linux parts it needs did not exist: `LinuxApplicationFinder` reads the desktop entries
+  (`DesktopEntry`) and asks `xdg-mime` for the program of a type, `LinuxApplicationLauncher` starts programs without a shell, so
+  paths with spaces work. Order of choice: the editor set for the extension, then the default of the desktop for the type, then the
+  default editor of the preferences, then `xdg-open`. Finding: core's `Application` changes the identifier to lower case, which breaks a command
+  with capitals, so `LinuxApplication` keeps the command as it is.
+  **Proof**: unit tests for `DesktopEntry`, `LinuxApplicationFinder` and the launcher (9) and smoke `edit` with fake editors that change the
+  file after a pause: the text and markdown editors by type, a chosen editor and the default editor each change the file on the server.
+
+- [x] **6.7 Preferences: editors and the program for comparing**
+
+  **Request**: the settings must offer a default editor, ideally by file type.
+  **Done**: a tab Applications with the default editor, "always use the default editor", a table of editors by file extension (add,
+  remove) and the program for comparing. `ApplicationPicker` lists the installed programs and takes any command. Settings
+  are `editor.bundleIdentifier`, `editor.alwaysUseDefault`, `linux.editor.<extension>`, `linux.editor.types`, `linux.compare.tool`.
+  **Proof**: `PreferencesControllerTest` (editors by type, persisted and reloaded) and `CompareToolsTest`.
+
+- [x] **6.8 Compare in a program**
+
+  **Request**: "compare" as the action for existing files should open a tool: download the file as a second copy and compare.
+  **Done**: Compare… (menu and menu of the right mouse button) downloads the server file again to a folder of its own and starts the
+  chosen program (Meld, KDiff3, Kompare, Diffuse, xxdiff, `code --diff`, DiffMerge, Beyond Compare, or any command) with the file on this computer
+  first and the copy second. The file on this computer is never touched. The setting "When a file to download exists:
+  Compare in a program" does this for the files that exist and downloads the others. Finding: the action called Compare in the core
+  skips files that match in size, time or checksum. It works (checked against a real SFTP server: same file skipped, older file
+  fetched) but shows nothing, which looked like a bug. It is now named "Skip files that did not change".
+  **Proof**: smoke `compare` with a program that records its arguments (arguments, content of the copy, local file unchanged, the
+  download setting with one existing and one new file), 4 unit tests of the choice of the program, a test of the preference, and the
+  SFTP scenario checks that an unchanged file is skipped and an older one is downloaded.
+
+- [x] **6.9 FTP: anonymous login, character set, connect mode, transfer mode**
+
+  **Request**: FTP settings for the default character set, the transfer method (binary, ASCII, auto) and anonymous login.
+  **Done**: the connection dialog shows Anonymous Login for protocols that allow it and, under More Options, the character set
+  (also for other protocols that have one), the FTP connect mode and the transfer mode. All are kept in the bookmark and shown again
+  when it is edited. The tab FTP in the preferences sets the default character set, the default transfer mode and the extensions
+  that auto sends as ASCII. Core change, small and opt-in: new `ftp/.../FTPFileType` chooses the file type of the data connection
+  from `ftp.transfer.mode` (`binary` default, `ascii`, `auto`) of the bookmark or the preferences, `FTPWriteFeature` uses it, and
+  `defaults` has the two new settings. Limit: it applies to uploads only. A converted download is shorter than the size the
+  server tells, which core counts as an incomplete transfer, so downloads stay binary (the preferences say so).
+  **Proof**: unit tests (6 for the file type, 4 for building a bookmark with options, 4 for the dialog, 1 for the tab) and smoke `ftp`
+  against a real FTP server in Docker (`delfer/alpine-ftp-server`): a bookmark in auto mode with ISO-8859-1 and passive mode
+  uploads `text.txt` (18 bytes with line feeds) and `data.bin`. The server has `text.txt` with carriage returns (20 bytes)
+  and `data.bin` unchanged (16 bytes), checked with `docker exec` by `smoke.sh`. The anonymous login is covered by unit tests only,
+  the test server has no anonymous account.
+
+- [x] **6.10 Drag files out of the listing**
+
+  **Request**: dragging out of the browser into the file manager or desktop did not work.
+  **Done**: dragging selected files and folders starts a download into a staging folder (`DragStaging`) and gives the other
+  application the final paths. Each item is moved to its final name when the download is complete, so a drop that comes
+  too early finds no file instead of a part of one. The folder is removed when the application ends. The downloads show in the transfers window.
+  **Proof**: smoke `dragout` drags a file and a folder with the real mouse (`xdotool`) from the listing into a second window of the
+  application, which records the dropped files. They arrive complete with the content of the server. It is skipped when `xdotool`
+  is not installed. A drop into the real file manager of a desktop has not been tried.
+
+- [x] **6.11 Fixes found by CI and by the tests along the way**
+
+  - The jobs of `linux-gui.yml` have time limits and apt retries, because the Ubuntu mirror was slow once. The deb install job needs up to
+    13 minutes then and has to be left to finish. A cancelled job has no log.
+  - `BookmarkPersistenceTest` failed once on CI. The folder monitor of the first collection can write a deleted bookmark back, so the test
+    turns the monitor off.
+  - The sync scenario read files that were still being written. It waits for the content now.
+  - `smoke.sh` pins its home to the credentials file store, because a machine with `secret-tool` and a display starts a keyring that waits for a
+    prompt. The scenarios that start transfers or change settings run in a home of their own, because a finished transfer stays in the
+    list of transfers of the next start and the download scenario counts them.
+  - `smoke.sh` starts an FTP server next to the SFTP one when Docker works, and the packages of the workflow include `xdotool`.
 
 ---
 
