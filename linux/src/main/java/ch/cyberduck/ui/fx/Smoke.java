@@ -114,6 +114,9 @@ public final class Smoke {
                 case "duplicate":
                     System.out.println(duplicate(browser, arguments.get(1)));
                     return 0;
+                case "context":
+                    System.out.println(context(browser, arguments.get(1)));
+                    return 0;
                 case "chmod":
                     System.out.println(chmod(browser, arguments.get(1), arguments.get(2)));
                     return 0;
@@ -1299,5 +1302,84 @@ public final class Smoke {
             return null;
         });
         return "SMOKE OK chmod boxes=600 octal=664 recursive=700";
+    }
+
+    private static void rightClick(final javafx.scene.Node target) {
+        Event.fireEvent(target, new javafx.scene.input.ContextMenuEvent(javafx.scene.input.ContextMenuEvent.CONTEXT_MENU_REQUESTED,
+            5, 5, 300, 300, false, null));
+    }
+
+    private static List<String> texts(final javafx.scene.control.ContextMenu menu) {
+        return menu.getItems().stream().filter(i -> i.getText() != null && i.isVisible()).map(javafx.scene.control.MenuItem::getText)
+            .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * The menus of the right mouse button: on a file, on a folder and on the empty area of the listing
+     *
+     * @param directory Folder with a file f.txt and a folder sub
+     */
+    private static String context(final BrowserController browser, final String directory) throws Exception {
+        mount(browser, directory);
+        await("rows", () -> onFx(() -> null != row(browser, "f.txt") && null != row(browser, "sub")));
+
+        // A file: the row is selected and the menu offers what can be done with the file
+        onFx(() -> {
+            rightClick(row(browser, "f.txt"));
+            return null;
+        });
+        await("menu on file", () -> onFx(() -> browser.getRowMenu().isShowing()));
+        check("the row was selected", "f.txt".equals(onFx(() -> browser.getTable().getSelectionModel().getSelectedItem().getName())));
+        final List<String> file = onFx(() -> texts(browser.getRowMenu()));
+        for(String expected : List.of("Download", "Get Info", "Rename", "Delete", "New Folder", "Upload…", "Refresh")) {
+            check(String.format("file menu has %s in %s", expected, file), file.contains(expected));
+        }
+        check("a file cannot be locked as a vault", file.stream().noneMatch(t -> t.contains("Vault")));
+        // The command of the menu is the same as the one of the window menu
+        onFx(() -> {
+            browser.getRowMenu().getItems().stream().filter(i -> "Get Info".equals(i.getText())).findFirst().orElseThrow().fire();
+            return null;
+        });
+        await("info from the menu", () -> onFx(() -> !browser.getInfos().isEmpty() && browser.getInfos().get(0).getStage().isShowing()));
+        onFx(() -> {
+            browser.getInfos().get(0).getStage().close();
+            return null;
+        });
+
+        // A folder can be a vault
+        onFx(() -> {
+            rightClick(row(browser, "sub"));
+            return null;
+        });
+        await("menu on folder", () -> onFx(() -> "sub".equals(browser.getTable().getSelectionModel().getSelectedItem().getName()) && browser.getRowMenu().isShowing()));
+        final List<String> folder = onFx(() -> texts(browser.getRowMenu()));
+        check(String.format("folder menu offers the vault in %s", folder), folder.contains("Unlock Vault"));
+        check("folder menu can open it", folder.contains("Open"));
+
+        // The empty area of the listing
+        final javafx.scene.Node empty = onFx(() -> {
+            for(javafx.scene.Node node : browser.getTable().lookupAll(".table-row-cell")) {
+                if(node instanceof TableRow<?> r && r.isEmpty()) {
+                    return node;
+                }
+            }
+            return null;
+        });
+        check("there is an empty row to click", empty != null);
+        onFx(() -> {
+            rightClick(empty);
+            return null;
+        });
+        await("menu on empty area", () -> onFx(() -> browser.getEmptyMenu().isShowing() && !browser.getRowMenu().isShowing()));
+        final List<String> blank = onFx(() -> texts(browser.getEmptyMenu()));
+        check(String.format("empty area offers the upload picker in %s", blank), blank.contains("Upload…") && blank.contains("New Folder"));
+        onFx(() -> {
+            Platform.runLater(() -> browser.getEmptyMenu().getItems().stream().filter(i -> "New Folder".equals(i.getText())).findFirst().orElseThrow().fire());
+            return null;
+        });
+        answerInput("created");
+        await("folder from the menu", () -> names(browser).contains("created"));
+        check("the folder is on disk", java.nio.file.Files.isDirectory(java.nio.file.Paths.get(directory, "created")));
+        return String.format("SMOKE OK context file=%d folder=%d empty=%d", file.size(), folder.size(), blank.size());
     }
 }

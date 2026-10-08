@@ -96,6 +96,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
@@ -110,6 +111,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.input.DragEvent;
+import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.MouseButton;
@@ -209,6 +211,7 @@ public class BrowserController extends FxController {
         final BorderPane root = new BorderPane();
         bookmarks = new BookmarkController(this);
         bookmarksToggle.setSelected(true);
+        this.contextMenus();
         bookmarksToggle.setOnAction(event -> root.setLeft(bookmarksToggle.isSelected() ? bookmarks.getPane() : null));
         connect.setOnAction(event -> this.connect());
         back.setOnAction(event -> this.back());
@@ -256,11 +259,22 @@ public class BrowserController extends FxController {
                     this.open(row.getItem());
                 }
             });
+            // A right click selects the row, like in a file manager, and shows what can be done with it
+            row.setOnContextMenuRequested(event -> {
+                if(!row.isEmpty()) {
+                    if(!row.isSelected()) {
+                        table.getSelectionModel().clearAndSelect(row.getIndex());
+                    }
+                    this.showMenu(rowMenu, row.getItem(), event);
+                }
+            });
             // Files dropped on a folder go into the folder
             row.setOnDragOver(event -> this.acceptDrag(event));
             row.setOnDragDropped(event -> this.drop(event, !row.isEmpty() && row.getItem().isDirectory() ? row.getItem() : null));
             return row;
         });
+        // The empty area of the listing offers what can be done in the folder that is shown
+        table.setOnContextMenuRequested(event -> this.showMenu(emptyMenu, null, event));
         // Files dropped anywhere else go into the folder that is shown
         table.setOnDragOver(event -> this.acceptDrag(event));
         table.setOnDragDropped(event -> this.drop(event, null));
@@ -327,6 +341,75 @@ public class BrowserController extends FxController {
             }
         });
         return column;
+    }
+
+    private final ContextMenu rowMenu = new ContextMenu();
+    private final ContextMenu emptyMenu = new ContextMenu();
+    private MenuItem lockVaultRow;
+    private MenuItem openRow;
+
+    private MenuItem item(final String text, final Runnable action) {
+        final MenuItem item = new MenuItem(text);
+        item.setOnAction(event -> action.run());
+        return item;
+    }
+
+    /**
+     * What can be done with a file or folder, and in the folder that is shown
+     */
+    private void contextMenus() {
+        openRow = this.item(Messages.get("Open"), () -> {
+            final Path selected = table.getSelectionModel().getSelectedItem();
+            if(selected != null) {
+                this.open(selected);
+            }
+        });
+        lockVaultRow = this.item(Messages.get("Unlock Vault"), this::lockUnlockVault);
+        rowMenu.getItems().setAll(
+            openRow,
+            this.item(Messages.get("Download"), this::download),
+            new SeparatorMenuItem(),
+            this.item(Messages.get("Get Info"), this::info),
+            new SeparatorMenuItem(),
+            this.item(Messages.get("Rename"), this::rename),
+            this.item(Messages.get("Duplicate File") + "…", this::duplicate),
+            this.item(Messages.get("Delete"), this::delete),
+            new SeparatorMenuItem(),
+            lockVaultRow,
+            this.item(Messages.get("Synchronize") + "…", this::synchronize),
+            new SeparatorMenuItem(),
+            this.item(Messages.get("New Folder"), this::newFolder),
+            this.item(Messages.get("Upload") + "…", this::upload),
+            this.item(Messages.get("Refresh"), this::reload));
+        emptyMenu.getItems().setAll(
+            this.item(Messages.get("Upload") + "…", this::upload),
+            this.item(Messages.get("New Folder"), this::newFolder),
+            new SeparatorMenuItem(),
+            this.item(Messages.get("Refresh"), this::reload),
+            this.item(Messages.get("Synchronize") + "…", this::synchronize),
+            this.item(Messages.get("Create Vault") + "…", this::createVault));
+    }
+
+    private void showMenu(final ContextMenu menu, final Path selected, final ContextMenuEvent event) {
+        event.consume();
+        if(!this.isMounted()) {
+            return;
+        }
+        if(selected != null) {
+            lockVaultRow.setVisible(selected.isDirectory());
+            lockVaultRow.setText(Messages.get(pool.getVaultRegistry().contains(selected) ? "Lock Vault" : "Unlock Vault"));
+        }
+        rowMenu.hide();
+        emptyMenu.hide();
+        menu.show(table, event.getScreenX(), event.getScreenY());
+    }
+
+    ContextMenu getRowMenu() {
+        return rowMenu;
+    }
+
+    ContextMenu getEmptyMenu() {
+        return emptyMenu;
     }
 
     private MenuBar menu() {
