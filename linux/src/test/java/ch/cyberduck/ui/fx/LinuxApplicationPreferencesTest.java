@@ -98,4 +98,23 @@ public class LinuxApplicationPreferencesTest {
         assertEquals("https://github.com/leancode/cyberduck-linux/issues/new?body=Version%209.6.0",
             java.text.MessageFormat.format(preferences.getProperty("website.bug"), "9.6.0"));
     }
+
+    @Test
+    public void testLogsInLikeSshDoes() throws Exception {
+        ch.cyberduck.core.preferences.PreferencesFactory.set(new LinuxApplicationPreferences(folder.getRoot().toPath().resolve("cyberduck.properties")));
+        final ch.cyberduck.core.preferences.Preferences preferences = ch.cyberduck.core.preferences.PreferencesFactory.get();
+        // The agent and the default key files, as ssh has them
+        assertTrue(preferences.getBoolean("ssh.authentication.agent.enable"));
+        assertTrue(preferences.getBoolean("ssh.authentication.publickey.default.enable"));
+        assertEquals("~/.ssh/id_ed25519", preferences.getProperty("ssh.authentication.publickey.default.rsa"));
+        assertEquals("~/.ssh/id_rsa", preferences.getProperty("ssh.authentication.publickey.default.dsa"));
+        // A server without a key of its own gets the default key that exists
+        final java.io.File key = folder.newFile("id_ed25519");
+        preferences.setProperty("ssh.authentication.publickey.default.rsa", key.getAbsolutePath());
+        final ch.cyberduck.core.Host host = new ch.cyberduck.core.Host(new ch.cyberduck.core.sftp.SFTPProtocol(), "no-such-host.example.invalid");
+        host.getCredentials().setUsername("root");
+        final ch.cyberduck.core.Credentials configured = new ch.cyberduck.core.sftp.openssh.OpenSSHCredentialsConfigurator().configure(host);
+        assertTrue(configured.isPublicKeyAuthentication());
+        assertEquals(key.getAbsolutePath(), configured.getIdentity().getAbsolute());
+    }
 }

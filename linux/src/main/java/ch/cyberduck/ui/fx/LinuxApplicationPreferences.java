@@ -153,7 +153,13 @@ public class LinuxApplicationPreferences extends DefaultPreferences {
         // Problems of this version are reported to the repository of this version. The text is the version of the program.
         this.setDefault("website.bug", "https://github.com/leancode/cyberduck-linux/issues/new?body=Version%20{0}");
         this.setDefault("website.linux", "https://github.com/leancode/cyberduck-linux");
-        this.setDefault("ssh.authentication.agent.enable", String.valueOf(false));
+        // Log in like ssh does without being told: with the keys of the ssh agent (SSH_AUTH_SOCK), with the settings of
+        // ~/.ssh/config, and with the default key files. The core looks for one RSA and one DSA key file, so these two
+        // places hold the keys that are in use today: the Ed25519 key first, then the RSA key.
+        this.setDefault("ssh.authentication.agent.enable", String.valueOf(true));
+        this.setDefault("ssh.authentication.publickey.default.enable", String.valueOf(true));
+        this.setDefault("ssh.authentication.publickey.default.rsa", "~/.ssh/id_ed25519");
+        this.setDefault("ssh.authentication.publickey.default.dsa", "~/.ssh/id_rsa");
         this.setDefault("connection.ssl.securerandom.algorithm", "NativePRNGNonBlocking");
     }
 

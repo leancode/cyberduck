@@ -210,6 +210,20 @@ if docker info >/dev/null 2>&1; then
         printf '#!/bin/sh\necho "$*" > "$0.log"\n' > "$work/keys/fake-terminal.sh"
         chmod +x "$work/keys/fake-terminal.sh"
         smoke '^SMOKE OK sshkey ' sshkey 127.0.0.1 "$key_port" foo "$work/keys/id_ed25519" "$work/keys/fake-terminal.sh"
+        # The keys that ssh uses without being told: first the default key file, then the agent. No key is chosen and no password is typed.
+        mkdir -p "$work/home-defaultkey/.ssh" "$work/home-defaultkey/.duck" "$work/home-agent/.duck"
+        cp "$HOME/.duck/cyberduck.properties" "$work/home-defaultkey/.duck/cyberduck.properties"
+        cp "$HOME/.duck/cyberduck.properties" "$work/home-agent/.duck/cyberduck.properties"
+        cp "$work/keys/id_ed25519" "$work/home-defaultkey/.ssh/id_ed25519" && chmod 600 "$work/home-defaultkey/.ssh/id_ed25519"
+        HOME="$work/home-defaultkey" smoke '^SMOKE OK sshquick ' sshquick 127.0.0.1 "$key_port" foo
+        if command -v ssh-agent >/dev/null 2>&1 && command -v ssh-add >/dev/null 2>&1; then
+            eval "$(ssh-agent -s)" >/dev/null
+            ssh-add "$work/keys/id_ed25519" >/dev/null 2>&1
+            HOME="$work/home-agent" smoke '^SMOKE OK sshquick ' sshquick 127.0.0.1 "$key_port" foo
+            ssh-agent -k >/dev/null 2>&1
+        else
+            echo "skip ssh agent (ssh-agent is not installed)"
+        fi
         docker stop "$key_container" >/dev/null 2>&1
     else
         echo "skip sshkey (ssh-keygen is not installed)"

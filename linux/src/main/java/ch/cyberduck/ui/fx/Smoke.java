@@ -168,6 +168,9 @@ public final class Smoke {
                     System.out.printf("SMOKE OK sshkey %s%n", sshkey(browser, arguments.get(1), arguments.get(2), arguments.get(3), arguments.get(4),
                         arguments.size() > 5 ? arguments.get(5) : null));
                     return 0;
+                case "sshquick":
+                    System.out.printf("SMOKE OK sshquick %s%n", sshquick(browser, arguments.get(1), arguments.get(2), arguments.get(3)));
+                    return 0;
                 case "files":
                     System.out.println(files(browser, arguments.get(1)));
                     return 0;
@@ -481,6 +484,27 @@ public final class Smoke {
             }
             TimeUnit.MILLISECONDS.sleep(100);
         }
+    }
+
+    /**
+     * Quick Connect with a URL that has no password and no key: the keys that ssh uses without being told (the agent and
+     * the default key files) have to be enough, and no password may be asked.
+     *
+     * @return Summary of the dialogs answered
+     */
+    private static String sshquick(final BrowserController browser, final String host, final String port, final String user) throws Exception {
+        final java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
+        onFx(() -> {
+            browser.getQuick().setText(String.format("sftp://%s@%s:%s", user, host, port));
+            browser.getQuickGo().fire();
+            return null;
+        });
+        awaitAnswering("login with the keys of ssh", "", counts, () -> onFx(() -> null != browser.getRendered()));
+        check("no password was asked", 0 == counts.getOrDefault("password", 0));
+        check("the folder of the account is listed", names(browser).contains("upload"));
+        menu(browser, "Disconnect");
+        await("disconnected", () -> onFx(() -> !browser.isMounted()));
+        return counts.toString();
     }
 
     /**
