@@ -104,6 +104,15 @@ echo "ok notified"
 mkdir -p "$work/perm/d" && echo x > "$work/perm/f.txt" && chmod 640 "$work/perm/f.txt" && echo y > "$work/perm/d/inside.txt"
 smoke '^SMOKE OK chmod boxes=600 octal=664 recursive=700$' chmod "$work/perm" f.txt
 
+# Edit with the program that is set for the type of the file. The programs wait a moment, like a person, and then change
+# the file they are given. The change must arrive on the server. Own home, because the settings are changed.
+mkdir -p "$work/edit"
+for f in a.txt b.md c.dat; do printf original > "$work/edit/$f"; done
+printf '#!/bin/sh\nsleep 2\nprintf " by text" >> "$1"\n' > "$work/edit-text.sh"
+printf '#!/bin/sh\nsleep 2\nprintf " by markdown" >> "$1"\n' > "$work/edit-markdown.sh"
+chmod +x "$work/edit-text.sh" "$work/edit-markdown.sh"
+HOME="$work/home-vault" smoke '^SMOKE OK edit text=ok markdown=ok chosen=ok default=ok$' edit "$work/edit" "$work/edit-text.sh" "$work/edit-markdown.sh"
+
 # The menus of the right mouse button on a file, a folder and the empty area
 mkdir -p "$work/ctx/sub" && echo x > "$work/ctx/f.txt"
 smoke '^SMOKE OK context file=[0-9]+ folder=[0-9]+ empty=[0-9]+$' context "$work/ctx"

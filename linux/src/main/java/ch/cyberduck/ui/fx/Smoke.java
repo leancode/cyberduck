@@ -114,6 +114,9 @@ public final class Smoke {
                 case "duplicate":
                     System.out.println(duplicate(browser, arguments.get(1)));
                     return 0;
+                case "edit":
+                    System.out.println(edit(browser, arguments.get(1), arguments.get(2), arguments.get(3)));
+                    return 0;
                 case "context":
                     System.out.println(context(browser, arguments.get(1)));
                     return 0;
@@ -1381,5 +1384,58 @@ public final class Smoke {
         await("folder from the menu", () -> names(browser).contains("created"));
         check("the folder is on disk", java.nio.file.Files.isDirectory(java.nio.file.Paths.get(directory, "created")));
         return String.format("SMOKE OK context file=%d folder=%d empty=%d", file.size(), folder.size(), blank.size());
+    }
+
+    /**
+     * Edit files with the editor that is set for their type. The editors are scripts that wait a moment, as a person
+     * does, and then change the file that they are given. The change has to arrive on the server.
+     *
+     * @param directory Folder with a.txt, b.md and c.dat that all contain "original"
+     * @param textEditor Script for txt files
+     * @param markdownEditor Script for md files
+     */
+    private static String edit(final BrowserController browser, final String directory, final String textEditor, final String markdownEditor) throws Exception {
+        final org.apache.logging.log4j.Logger log = org.apache.logging.log4j.LogManager.getLogger(Smoke.class);
+        PreferencesFactory.get().setProperty("linux.editor.txt", textEditor);
+        PreferencesFactory.get().setProperty("linux.editor.md", markdownEditor);
+        // Without a program for the type the default editor is used
+        PreferencesFactory.get().setProperty("editor.bundleIdentifier", markdownEditor);
+        mount(browser, directory);
+        final java.nio.file.Path a = java.nio.file.Paths.get(directory, "a.txt");
+        final java.nio.file.Path b = java.nio.file.Paths.get(directory, "b.md");
+        final java.nio.file.Path c = java.nio.file.Paths.get(directory, "c.dat");
+
+        select(browser, "a.txt");
+        onFx(() -> {
+            browser.getMenuBar().getMenus().get(0).getItems().stream().filter(i -> "Edit".equals(i.getText())).findFirst().orElseThrow().fire();
+            return null;
+        });
+        await("text editor changed the file on the server", () -> content(a).equals("original by text"));
+
+        select(browser, "b.md");
+        onFx(() -> {
+            browser.edit();
+            return null;
+        });
+        await("markdown editor changed the file on the server", () -> content(b).equals("original by markdown"));
+
+        // The menu of the right mouse button names the programs for the file and the choice is used
+        select(browser, "a.txt");
+        final ch.cyberduck.core.local.Application chosen = new LinuxApplication(markdownEditor, "Markdown editor");
+        onFx(() -> {
+            browser.edit(chosen, browser.getTable().getSelectionModel().getSelectedItem());
+            return null;
+        });
+        await("chosen editor changed the file", () -> content(a).equals("original by text by markdown"));
+
+        // A type without a program of its own opens in the default editor
+        select(browser, "c.dat");
+        onFx(() -> {
+            browser.edit();
+            return null;
+        });
+        await("default editor changed the file", () -> content(c).equals("original by markdown"));
+        log.debug("Edited files");
+        return "SMOKE OK edit text=ok markdown=ok chosen=ok default=ok";
     }
 }
