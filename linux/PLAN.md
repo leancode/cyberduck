@@ -1461,6 +1461,14 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   - The repository is renamed `cyberduck-linux`. Done by the owner on GitHub: [x] rename (2026-10-08, old links redirect), [x] default branch `main`, [ ] delete `cyberduck-linuxgui` (still there on 2026-10-08), [ ] switch off the upstream workflows that this repository does not use. CI on `main` passed (run 24) with the new name.
   - [x] Licence headers: `LICENSE.txt` is GPL version 3. Upstream files have both headers (1918 files "version 2 or later", 1392 files "version 3 or later"), and the files of `linux/` have "version 3 or later". Nothing to change.
 
+- [x] **7.2a Release workflow** (`.github/workflows/linux-release.yml`)
+
+  Written 2026-10-08, because the upstream workflow `release.yml` (started by every tag, built on self-hosted runners, published to iterate's servers) is switched off in this repository. A tag that matches `v*-linux.*` starts it:
+  - [x] `check`: the commit of the tag must have a successful run of `Linux GUI` (tests, scenarios and install tests).
+  - [x] `build` for x64 (`ubuntu-24.04`) and arm64 (`ubuntu-24.04-arm`): builds the deb and rpm, validates the desktop entry, installs the deb with its dependencies and starts it.
+  - [x] `release` (tags only): writes `SHA256SUMS` and creates a pre-release on GitHub with the packages, a text that says it is a community build, and the generated list of changes.
+  - [ ] Started by hand (`workflow_dispatch`) it builds and tests without a release. A dry run on both architectures has to pass before the first tag.
+
 - [ ] **7.2 First release**
 
   After the Yes items of 6.12 are done and tested again on a desktop: a pre-release tag such as `v9.6.0-linux.1` (upstream version plus the Linux build). It is the first real run of the release workflow (4.6). Until upstream agrees on the name, the packages are described as a community build, "Cyberduck for Linux (unofficial)", because "Cyberduck" is a trademark of iterate GmbH.
