@@ -34,6 +34,7 @@ import ch.cyberduck.core.UserDateFormatterFactory;
 import ch.cyberduck.core.formatter.SizeFormatterFactory;
 import ch.cyberduck.core.pool.SessionPool;
 import ch.cyberduck.core.local.ApplicationFinderFactory;
+import ch.cyberduck.core.local.BrowserLauncherFactory;
 import ch.cyberduck.core.local.Application;
 import ch.cyberduck.core.editor.EditorFactory;
 import ch.cyberduck.core.editor.Editor;
@@ -83,6 +84,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.nio.file.Files;
 import java.io.IOException;
+import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -104,6 +106,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
@@ -163,6 +166,10 @@ public class BrowserController extends FxController {
     private final ToggleButton bookmarksToggle = new ToggleButton(Messages.get("Bookmarks"));
     private final Button connect = new Button(Messages.get("Connect"));
     private final Button back = new Button();
+    private final Button forward = new Button();
+    private final TextField quick = new TextField();
+    private final TextField search = new TextField();
+    private final javafx.collections.transformation.FilteredList<Path> filtered = new javafx.collections.transformation.FilteredList<>(rows, p -> true);
     private final Button up = new Button();
     private final Button refresh = new Button(Messages.get("Refresh"));
     private final Button download = new Button(Messages.get("Download"));
@@ -211,6 +218,10 @@ public class BrowserController extends FxController {
      * Previously shown directories for the back button
      */
     private final Deque<Path> history = new ArrayDeque<>();
+    /**
+     * Directories left with the back button, for the forward button
+     */
+    private final Deque<Path> forwards = new ArrayDeque<>();
 
     public BrowserController(final Stage stage) {
         this.stage = stage;
@@ -226,6 +237,7 @@ public class BrowserController extends FxController {
         bookmarksToggle.setOnAction(event -> root.setLeft(bookmarksToggle.isSelected() ? bookmarks.getPane() : null));
         connect.setOnAction(event -> this.connect());
         back.setOnAction(event -> this.back());
+        forward.setOnAction(event -> this.forward());
         up.setOnAction(event -> this.up());
         refresh.setOnAction(event -> this.reload());
         download.setOnAction(event -> this.download());
@@ -242,16 +254,27 @@ public class BrowserController extends FxController {
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, bookmarksToggle, connect, back, up, refresh, download, upload, newFolder, rename, delete, transfers, location);
+        final HBox top = new HBox(8, bookmarksToggle, connect, back, forward, up, refresh, download, upload, newFolder, rename, delete, transfers, location, quick, search);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
         // Never cut the labels of the buttons. The path field gives way instead and the window cannot get narrower than the toolbar.
-        for(Region button : new Region[]{bookmarksToggle, connect, back, up, refresh, download, upload, newFolder, rename, delete, transfers}) {
+        for(Region button : new Region[]{bookmarksToggle, connect, back, forward, up, refresh, download, upload, newFolder, rename, delete, transfers}) {
             button.setMinWidth(Region.USE_PREF_SIZE);
         }
         back.setGraphic(Icons.back());
         back.setTooltip(new Tooltip(Messages.get("Back")));
         back.setAccessibleText(Messages.get("Back"));
+        forward.setGraphic(Icons.forward());
+        forward.setTooltip(new Tooltip(Messages.get("Forward")));
+        forward.setAccessibleText(Messages.get("Forward"));
+        quick.setPromptText(Messages.get("Quick Connect"));
+        quick.setPrefWidth(120);
+        quick.setMinWidth(60);
+        quick.setOnAction(event -> this.quickConnect(quick.getText()));
+        search.setPromptText(Messages.get("Search"));
+        search.setPrefWidth(110);
+        search.setMinWidth(60);
+        search.textProperty().addListener((observable, previous, text) -> this.filter(text));
         up.setGraphic(Icons.up());
         up.setTooltip(new Tooltip(Messages.get("Enclosing Folder")));
         up.setAccessibleText(Messages.get("Enclosing Folder"));
@@ -260,7 +283,10 @@ public class BrowserController extends FxController {
         stage.setOnShown(event -> stage.setMinWidth(Math.min(
             top.minWidth(-1) + stage.getWidth() - stage.getScene().getWidth(), Screen.getPrimary().getVisualBounds().getWidth())));
 
-        table.setItems(rows);
+        // The filter hides files, the sorted view follows the column headers
+        final javafx.collections.transformation.SortedList<Path> sorted = new javafx.collections.transformation.SortedList<>(filtered);
+        sorted.comparatorProperty().bind(table.comparatorProperty());
+        table.setItems(sorted);
         table.setPlaceholder(new Label());
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setRowFactory(view -> {
@@ -292,12 +318,31 @@ public class BrowserController extends FxController {
         table.setOnDragOver(event -> this.acceptDrag(event));
         table.setOnDragDropped(event -> this.drop(event, null));
         table.setOnKeyPressed(event -> {
-            if(event.getCode() == KeyCode.ENTER) {
-                final Path selected = table.getSelectionModel().getSelectedItem();
-                if(selected != null) {
-                    this.open(selected);
+            switch(event.getCode()) {
+                case ENTER: {
+                    final Path selected = table.getSelectionModel().getSelectedItem();
+                    if(selected != null) {
+                        this.open(selected);
+                    }
+                    break;
                 }
+                case DELETE:
+                    if(!table.getSelectionModel().isEmpty()) {
+                        this.delete();
+                    }
+                    break;
+                case F2:
+                    if(table.getSelectionModel().getSelectedItems().size() == 1) {
+                        this.rename();
+                    }
+                    break;
+                case BACK_SPACE:
+                    this.up();
+                    break;
+                default:
+                    return;
             }
+            event.consume();
         });
         table.getColumns().add(this.column("Filename", 360, new FilenameComparator(true), p -> {
             final String name = p.getName();
@@ -502,10 +547,69 @@ public class BrowserController extends FxController {
         final MenuItem showTransfers = new MenuItem(Messages.get("Transfers"));
         showTransfers.setAccelerator(KeyCombination.keyCombination("Shortcut+T"));
         showTransfers.setOnAction(event -> TransferController.get().show());
+        final CheckMenuItem hidden = new CheckMenuItem(Messages.get("Show Hidden Files"));
+        hidden.setAccelerator(KeyCombination.keyCombination("Shortcut+Shift+."));
+        hidden.setSelected(preferences.getBoolean("browser.showHidden"));
+        hidden.setOnAction(event -> {
+            preferences.setProperty("browser.showHidden", hidden.isSelected());
+            if(null != rendered) {
+                this.render(rendered);
+            }
+        });
+        final MenuItem refreshItem = this.item(Messages.get("Refresh"), this::reload);
+        refreshItem.setAccelerator(KeyCombination.keyCombination("Shortcut+R"));
+        refreshItem.disableProperty().bind(refresh.disableProperty());
+        final MenuItem findItem = this.item(Messages.get("Search"), () -> search.requestFocus());
+        findItem.setAccelerator(KeyCombination.keyCombination("Shortcut+F"));
+        final MenuItem backItem = this.item(Messages.get("Back"), this::back);
+        backItem.setAccelerator(KeyCombination.keyCombination("Alt+Left"));
+        backItem.disableProperty().bind(back.disableProperty());
+        final MenuItem forwardItem = this.item(Messages.get("Forward"), this::forward);
+        forwardItem.setAccelerator(KeyCombination.keyCombination("Alt+Right"));
+        forwardItem.disableProperty().bind(forward.disableProperty());
+        final MenuItem upItem = this.item(Messages.get("Enclosing Folder"), this::up);
+        upItem.setAccelerator(KeyCombination.keyCombination("Alt+Up"));
+        upItem.disableProperty().bind(up.disableProperty());
+        final MenuItem goTo = this.item(Messages.get("Go to Folder…"), () -> {
+            location.requestFocus();
+            location.selectAll();
+        });
+        goTo.setAccelerator(KeyCombination.keyCombination("Shortcut+L"));
+        goTo.disableProperty().bind(location.disableProperty());
+        final MenuItem quickItem = this.item(Messages.get("Quick Connect"), () -> quick.requestFocus());
+        quickItem.setAccelerator(KeyCombination.keyCombination("Shortcut+K"));
+        final String website = preferences.getProperty("website.help");
         menu = new MenuBar(
-            new Menu(Messages.get("File"), null, newBrowser, open, disconnect, new SeparatorMenuItem(), edit, compareItem, duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
-            new Menu(Messages.get("Window"), null, showTransfers));
+            new Menu(Messages.get("File"), null, newBrowser, open, quickItem, disconnect, new SeparatorMenuItem(), edit, compareItem, duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
+            new Menu(Messages.get("View"), null, hidden, refreshItem, findItem),
+            new Menu(Messages.get("Go"), null, backItem, forwardItem, upItem, goTo),
+            new Menu(Messages.get("Window"), null, showTransfers),
+            new Menu(Messages.get("Help"), null,
+                this.item(Messages.get("Cyberduck Help"), () -> this.browse(website)),
+                this.item(Messages.get("Report a Bug"), () -> this.browse(MessageFormat.format(preferences.getProperty("website.bug"), Version.get()))),
+                this.item(Messages.get("License"), () -> this.browse(preferences.getProperty("website.license"))),
+                this.item(Messages.get("Acknowledgments"), () -> this.browse(preferences.getProperty("website.acknowledgments"))),
+                this.item(Messages.get("Privacy Policy"), () -> this.browse(preferences.getProperty("website.privacypolicy"))),
+                new SeparatorMenuItem(),
+                this.item(Messages.get("About Cyberduck"), this::about)));
         return menu;
+    }
+
+    private void browse(final String url) {
+        BrowserLauncherFactory.get().open(url);
+    }
+
+    /**
+     * Name, version and where to find the documentation
+     */
+    void about() {
+        final javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
+        alert.initOwner(stage);
+        alert.setTitle(Messages.get("About Cyberduck"));
+        alert.setHeaderText(String.format("%s %s", preferences.getProperty("application.name"), Version.get()));
+        alert.setContentText(String.format("%s%n%n%s", Messages.get("Cloud storage browser for FTP, SFTP, WebDAV, Amazon S3 and more."),
+            preferences.getProperty("website.home")));
+        alert.showAndWait();
     }
 
     /**
@@ -723,6 +827,18 @@ public class BrowserController extends FxController {
         return stage;
     }
 
+    Button getForwardButton() {
+        return forward;
+    }
+
+    TextField getQuick() {
+        return quick;
+    }
+
+    TextField getSearch() {
+        return search;
+    }
+
     Button getRefresh() {
         return refresh;
     }
@@ -795,6 +911,7 @@ public class BrowserController extends FxController {
                 workdir = null;
                 pending = null;
                 history.clear();
+                forwards.clear();
                 updateNavigation();
                 rendered = null;
                 renderedProperty.set(null);
@@ -848,6 +965,7 @@ public class BrowserController extends FxController {
     private void show(final Path directory, final Path previous, final boolean remember) {
         if(remember && null != previous && !previous.equals(directory)) {
             history.push(previous);
+            forwards.clear();
         }
         pending = null;
         workdir = directory;
@@ -858,6 +976,7 @@ public class BrowserController extends FxController {
 
     private void updateNavigation() {
         back.setDisable(history.isEmpty());
+        forward.setDisable(forwards.isEmpty());
         up.setDisable(null == workdir || workdir.isRoot());
         refresh.setDisable(null == workdir);
         location.setDisable(null == workdir);
@@ -886,9 +1005,57 @@ public class BrowserController extends FxController {
      */
     void back() {
         if(!history.isEmpty()) {
+            if(null != workdir) {
+                forwards.push(workdir);
+            }
             this.navigate(history.pop(), false);
             this.updateNavigation();
         }
+    }
+
+    /**
+     * Show the directory that the back button left
+     */
+    void forward() {
+        if(!forwards.isEmpty()) {
+            if(null != workdir) {
+                history.push(workdir);
+            }
+            this.navigate(forwards.pop(), false);
+            this.updateNavigation();
+        }
+    }
+
+    /**
+     * Open the connection for a URL or for a server name, using the default protocol when there is no scheme
+     */
+    void quickConnect(final String input) {
+        final String typed = StringUtils.trimToEmpty(input);
+        if(typed.isEmpty()) {
+            return;
+        }
+        if(typed.contains("://")) {
+            this.open(typed);
+        }
+        else {
+            final Protocol preferred = ProtocolFactory.get().forName(preferences.getProperty("connection.protocol.default"));
+            this.open(String.format("%s://%s", null == preferred ? "sftp" : preferred.getScheme().name(), typed));
+        }
+        quick.clear();
+    }
+
+    /**
+     * Show only the files with a name that contains the text
+     */
+    void filter(final String text) {
+        final String needle = StringUtils.lowerCase(StringUtils.trimToEmpty(text));
+        filtered.setPredicate(needle.isEmpty() ? p -> true : p -> StringUtils.lowerCase(p.getName()).contains(needle));
+        this.summarize();
+    }
+
+    private void summarize() {
+        summary.set(null == rendered ? StringUtils.EMPTY : filtered.size() == rows.size()
+            ? String.format("%d items", rows.size()) : String.format("%d of %d items", filtered.size(), rows.size()));
     }
 
     /**
@@ -1270,6 +1437,10 @@ public class BrowserController extends FxController {
         return up;
     }
 
+    String getStatusText() {
+        return status.getText();
+    }
+
     TextField getLocation() {
         return location;
     }
@@ -1288,6 +1459,9 @@ public class BrowserController extends FxController {
         final boolean showHidden = preferences.getBoolean("browser.showHidden");
         final AttributedList<Path> list = cache.get(directory).filter(DEFAULT_ORDER,
             showHidden ? new NullFilter<>() : new DefaultBrowserFilter());
+        if(!directory.equals(rendered)) {
+            search.clear();
+        }
         rows.setAll(list.toList());
         rendered = directory;
         renderedProperty.set(directory);
@@ -1300,6 +1474,6 @@ public class BrowserController extends FxController {
                 table.scrollTo(p);
             });
         }
-        summary.set(String.format("%d items", rows.size()));
+        this.summarize();
     }
 }

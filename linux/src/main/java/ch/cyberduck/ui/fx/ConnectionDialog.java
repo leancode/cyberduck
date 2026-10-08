@@ -45,6 +45,7 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.stage.Window;
 
@@ -64,6 +65,10 @@ public class ConnectionDialog extends Dialog<Host> {
     private final TextField username = new TextField();
     private final PasswordField password = new PasswordField();
     private final TextField path = new TextField();
+    private final TextField privateKey = new TextField();
+    private final Button chooseKey = new Button(Messages.get("Choose…"));
+    private final HBox keyRow = new HBox(4, privateKey, chooseKey);
+    private final Label privateKeyLabel = new Label(Messages.get("SSH Private Key"));
     private final CheckBox anonymous = new CheckBox(Messages.get("Anonymous Login"));
     /**
      * Character sets for the names of files. The empty text stands for the default of the preferences.
@@ -110,6 +115,7 @@ public class ConnectionDialog extends Dialog<Host> {
             try {
                 host = HostBuilder.fromFields(protocols, protocol.getValue(), server.getText(), port.getText(),
                     username.getText(), password.getText(), path.getText());
+                HostBuilder.identity(host, privateKey.getText());
                 HostBuilder.options(host, anonymous.isSelected(), encoding.getValue(), connectMode.getValue(),
                     null == transferMode.getValue() ? null : transferMode.getValue().getValue());
                 if(bookmark) {
@@ -176,6 +182,7 @@ public class ConnectionDialog extends Dialog<Host> {
         }
         username.setText(StringUtils.defaultString(initial.getCredentials().getUsername()));
         path.setText(StringUtils.defaultString(initial.getDefaultPath()));
+        privateKey.setText(null == initial.getCredentials().getIdentity() ? StringUtils.EMPTY : initial.getCredentials().getIdentity().getAbsolute());
         nickname.setText(StringUtils.defaultString(initial.getNickname()));
         anonymous.setSelected(initial.getProtocol().isAnonymousConfigurable() && initial.getCredentials().isAnonymousLogin());
         final String charset = initial.getEncoding();
@@ -213,6 +220,21 @@ public class ConnectionDialog extends Dialog<Host> {
             grid.addRow(row++, new Label(Messages.get("Password")), password);
         }
         grid.add(anonymous, 1, row++);
+        privateKey.setPromptText(Messages.get("Optional, instead of the password"));
+        chooseKey.setOnAction(event -> {
+            final javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+            chooser.setTitle(Messages.get("SSH Private Key"));
+            final java.io.File ssh = new java.io.File(System.getProperty("user.home"), ".ssh");
+            if(ssh.isDirectory()) {
+                chooser.setInitialDirectory(ssh);
+            }
+            final java.io.File selected = chooser.showOpenDialog(this.getDialogPane().getScene().getWindow());
+            if(selected != null) {
+                privateKey.setText(selected.getAbsolutePath());
+            }
+        });
+        HBox.setHgrow(privateKey, Priority.ALWAYS);
+        grid.addRow(row++, privateKeyLabel, keyRow);
         grid.addRow(row++, new Label(Messages.get("Path")), path);
         // Settings of a protocol that most connections do not need
         final GridPane options = new GridPane();
@@ -254,6 +276,11 @@ public class ConnectionDialog extends Dialog<Host> {
         anonymous.setVisible(selected.isAnonymousConfigurable());
         anonymous.setManaged(selected.isAnonymousConfigurable());
         anonymous.setSelected(false);
+        for(javafx.scene.Node node : List.of(privateKeyLabel, keyRow, privateKey, chooseKey)) {
+            node.setVisible(selected.isPrivateKeyConfigurable());
+            node.setManaged(selected.isPrivateKeyConfigurable());
+        }
+        privateKey.setText(StringUtils.EMPTY);
         final boolean ftp = selected.getType() == Protocol.Type.ftp;
         for(javafx.scene.Node node : List.of(encodingLabel, encoding)) {
             node.setVisible(selected.isEncodingConfigurable());
@@ -310,6 +337,14 @@ public class ConnectionDialog extends Dialog<Host> {
 
     PasswordField getPasswordField() {
         return password;
+    }
+
+    TextField getPrivateKeyField() {
+        return privateKey;
+    }
+
+    Button getChooseKeyButton() {
+        return chooseKey;
     }
 
     TextField getPathField() {

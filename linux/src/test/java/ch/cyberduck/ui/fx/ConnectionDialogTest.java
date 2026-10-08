@@ -131,4 +131,31 @@ public class ConnectionDialogTest {
             return null;
         });
     }
+
+    @Test
+    public void testPrivateKeyOnlyForProtocolsWithKeys() throws Exception {
+        onFx(() -> {
+            final ConnectionDialog dialog = new ConnectionDialog(null, ProtocolFactory.get());
+            dialog.getProtocolBox().setValue(sftp);
+            assertTrue(dialog.getPrivateKeyField().isVisible());
+            assertTrue(dialog.getChooseKeyButton().isVisible());
+            dialog.getProtocolBox().setValue(ftp);
+            assertFalse(dialog.getPrivateKeyField().isVisible());
+            assertFalse(dialog.getPrivateKeyField().isManaged());
+            return null;
+        });
+    }
+
+    @Test
+    public void testPrivateKeyIsKeptInTheBookmark() throws Exception {
+        final Host bookmark = new Host(sftp, "example.net");
+        HostBuilder.identity(bookmark, "/home/user/.ssh/id_rsa");
+        onFx(() -> {
+            final ConnectionDialog dialog = new ConnectionDialog(null, ProtocolFactory.get(), true, bookmark);
+            assertEquals("/home/user/.ssh/id_rsa", dialog.getPrivateKeyField().getText());
+            dialog.getPrivateKeyField().setText("/home/user/.ssh/other");
+            dialog.getConnectButton().fire();
+            return null;
+        });
+    }
 }

@@ -17,6 +17,7 @@ package ch.cyberduck.ui.fx;
 
 import ch.cyberduck.core.Credentials;
 import ch.cyberduck.core.Host;
+import ch.cyberduck.core.LocalFactory;
 import ch.cyberduck.core.HostParser;
 import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.ProtocolFactory;
@@ -116,6 +117,18 @@ public final class HostBuilder {
     }
 
     /**
+     * Log in with a private key file instead of a password. A blank path removes the key.
+     */
+    public static void identity(final Host host, final String file) {
+        if(host.getProtocol().isPrivateKeyConfigurable() && StringUtils.isNotBlank(file)) {
+            host.getCredentials().setIdentity(LocalFactory.get(StringUtils.trim(file)));
+        }
+        else {
+            host.getCredentials().setIdentity(null);
+        }
+    }
+
+    /**
      * Set a custom property of the bookmark or remove it for a blank value, so that the default applies again
      */
     static void setOrClear(final Host host, final String key, final String value) {
@@ -142,6 +155,7 @@ public final class HostBuilder {
         to.setDefaultPath(from.getDefaultPath());
         to.setNickname(from.getNickname());
         to.getCredentials().setUsername(from.getCredentials().getUsername());
+        to.getCredentials().setIdentity(from.getCredentials().getIdentity());
         to.setEncoding(from.getEncoding());
         to.setFTPConnectMode(from.getFTPConnectMode());
         setOrClear(to, FTPFileType.MODE, from.getProperty(FTPFileType.MODE));
