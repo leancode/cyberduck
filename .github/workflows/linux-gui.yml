@@ -37,12 +37,12 @@ jobs:
       - name: Build the modules the Linux GUI depends on
         run: >-
           mvn --no-transfer-progress --batch-mode install
-          -DskipTests -DskipITs -DskipSign -Drevision=0
+          -DskipTests -DskipITs -DskipSign
           --also-make --projects i18n,profiles,linux
         env:
           SKIP_SIGN: true
       - name: Test the Linux GUI
-        run: xvfb-run -a mvn --no-transfer-progress --batch-mode verify -DskipITs -DskipSign -Drevision=0 --projects linux
+        run: xvfb-run -a mvn --no-transfer-progress --batch-mode verify -DskipITs -DskipSign --projects linux
         env:
           SKIP_SIGN: true
       - name: Run the smoke tests
