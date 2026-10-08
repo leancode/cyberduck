@@ -25,6 +25,7 @@ import ch.cyberduck.core.preferences.ApplicationResourcesFinderFactory;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.serviceloader.AutoServiceLoaderFactory;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,7 +49,9 @@ public final class Bootstrap {
     public static void initialize() {
         PreferencesFactory.set(new LinuxApplicationPreferences());
         final File resources = new File(ApplicationResourcesFinderFactory.get().find().getAbsolute());
-        final String language = language(System.getenv("LANGUAGE"), l -> new File(resources, String.format("%s.lproj", l)).isDirectory());
+        final String chosen = PreferencesFactory.get().getProperty(Languages.PROPERTY);
+        final String language = StringUtils.isNotBlank(chosen) && new File(resources, String.format("%s.lproj", chosen)).isDirectory() ? chosen
+            : language(System.getenv("LANGUAGE"), l -> new File(resources, String.format("%s.lproj", l)).isDirectory());
         if(language != null) {
             log.info("Use language {}", language);
             LocaleFactory.get().setDefault(language);

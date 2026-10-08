@@ -21,6 +21,8 @@ import ch.cyberduck.core.ProtocolFactory;
 import ch.cyberduck.core.ftp.FTPFileType;
 import ch.cyberduck.core.local.ApplicationFinder;
 import ch.cyberduck.core.local.ApplicationFinderFactory;
+import ch.cyberduck.core.local.RevealServiceFactory;
+import ch.cyberduck.core.preferences.LogDirectoryFinderFactory;
 import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.transfer.Transfer;
@@ -104,6 +106,10 @@ public final class PreferencesController {
     private final ComboBox<Choice> downloadAction = new ComboBox<>();
     private final ComboBox<Choice> uploadAction = new ComboBox<>();
     private final ComboBox<Choice> transferType = new ComboBox<>();
+    private final ComboBox<Choice> language = new ComboBox<>();
+    private final ComboBox<Choice> logLevel = new ComboBox<>();
+    private final ComboBox<Choice> uploadSpeed = new ComboBox<>();
+    private final ComboBox<Choice> downloadSpeed = new ComboBox<>();
     private final Spinner<Integer> timeout = new Spinner<>(1, 600, 30);
     private final Spinner<Integer> retries = new Spinner<>(0, 20, 1);
     private final CheckBox proxy = new CheckBox(Messages.get("Use the proxy of the system"));
@@ -214,6 +220,30 @@ public final class PreferencesController {
         });
         grid.addRow(2, new Label(Messages.get("Default Protocol")), protocol);
         GridPane.setHgrow(grid.getChildren().get(1), Priority.ALWAYS);
+
+        // The language is read when the program starts
+        final List<Choice> languages = new ArrayList<>();
+        languages.add(new Choice("", Messages.get("System default")));
+        for(String name : Languages.available(new File(ch.cyberduck.core.preferences.ApplicationResourcesFinderFactory.get().find().getAbsolute()))) {
+            languages.add(new Choice(name, Languages.name(name)));
+        }
+        this.choose(language, languages, Languages.PROPERTY, "");
+        grid.addRow(3, new Label(Messages.get("Language")), new HBox(8, language, new Label(Messages.get("Takes effect when the program is started again"))));
+
+        // Everything the program does, for a report of a problem
+        this.choose(logLevel, List.of(
+            new Choice("ERROR", Messages.get("Errors only")),
+            new Choice("WARN", Messages.get("Warnings")),
+            new Choice("INFO", Messages.get("Information")),
+            new Choice("DEBUG", Messages.get("Debug"))), "logging", "ERROR");
+        logLevel.valueProperty().addListener((observable, previous, selected) -> {
+            if(selected != null) {
+                preferences.setLogging(selected.getValue());
+            }
+        });
+        final Button showLog = new Button(Messages.get("Show Log File"));
+        showLog.setOnAction(event -> RevealServiceFactory.get().reveal(LogDirectoryFinderFactory.get().find()));
+        grid.addRow(4, new Label(Messages.get("Log")), new HBox(8, logLevel, showLog));
         return grid;
     }
 
@@ -259,6 +289,18 @@ public final class PreferencesController {
         });
     }
 
+    /**
+     * Limits in bytes per second
+     */
+    private List<Choice> speeds() {
+        final List<Choice> choices = new ArrayList<>();
+        choices.add(new Choice("-1", Messages.get("Unlimited")));
+        for(int kilobytes : new int[]{50, 100, 250, 500, 1024, 2048, 5120, 10240}) {
+            choices.add(new Choice(String.valueOf(kilobytes * 1024), String.format("%s/s", ch.cyberduck.core.formatter.SizeFormatterFactory.get().format(kilobytes * 1024L))));
+        }
+        return choices;
+    }
+
     private Parent transfers() {
         final GridPane grid = this.grid();
         this.choose(downloadAction, this.actions(Transfer.Type.download), "queue.download.action", "ask");
@@ -273,6 +315,11 @@ public final class PreferencesController {
         }
         this.choose(transferType, types, "queue.transfer.type", "concurrent");
         grid.addRow(2, new Label(Messages.get("Transfer Files")), transferType);
+        // Applies to the transfers that are started afterwards
+        this.choose(downloadSpeed, this.speeds(), "queue.download.bandwidth.bytes", "-1");
+        grid.addRow(3, new Label(Messages.get("Limit download speed")), downloadSpeed);
+        this.choose(uploadSpeed, this.speeds(), "queue.upload.bandwidth.bytes", "-1");
+        grid.addRow(4, new Label(Messages.get("Limit upload speed")), uploadSpeed);
         return grid;
     }
 
@@ -495,6 +542,22 @@ public final class PreferencesController {
 
     ComboBox<Protocol> getProtocol() {
         return protocol;
+    }
+
+    ComboBox<Choice> getLanguage() {
+        return language;
+    }
+
+    ComboBox<Choice> getLogLevel() {
+        return logLevel;
+    }
+
+    ComboBox<Choice> getDownloadSpeed() {
+        return downloadSpeed;
+    }
+
+    ComboBox<Choice> getUploadSpeed() {
+        return uploadSpeed;
     }
 
     ComboBox<Choice> getDownloadAction() {

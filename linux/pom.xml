@@ -157,6 +157,11 @@
                 </dependency>
                 <dependency>
                     <groupId>ch.cyberduck</groupId>
+                    <artifactId>importer</artifactId>
+                    <version>${project.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>ch.cyberduck</groupId>
                     <artifactId>protocols</artifactId>
                     <type>pom</type>
                     <version>${project.version}</version>

@@ -1370,7 +1370,7 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
 
   | # | Feature | Existing application | Linux today | Linux? |
   |---|---|---|---|---|
-  | D1 | Speed, time left, the file that is transferred, count of files per transfer | Transfers window | Name, status, progress bar | **Yes** |
+  | D1 | Speed, time left, the file that is transferred, count of files per transfer | Transfers window | Name, status with size, percentage, speed and time left (found while building 6.16), progress bar | Done (6.16) |
   | D2 | Bandwidth limit for uploads and downloads, and per transfer | Preferences, Transfers; Transfers window | Nothing | **Yes** |
   | D3 | Segmented downloads with several connections per file | Preferences, Transfers | Core default, no setting | Low |
   | D4 | Upload with a temporary name, preserve the modification date, change permissions on upload and download, skip files by regular expression, verify the checksum | Preferences, Transfers | Core defaults, no settings | Maybe |
@@ -1437,6 +1437,18 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
   - [x] Drag files onto a folder of the listing to move them (real mouse in the scenario `files`). Files that are dragged out of the window are downloaded from the moment they leave it, not when the drag starts; the scenario `dragout` still passes.
   - [x] Icons in the file name column: a folder, and a file tinted by kind (pictures, sound and video, archives, programs and text).
   - [x] Select All (Ctrl+A) in the Edit menu.
+  - [ ] Result of the CI run.
+
+- [x] **6.16 Yes batch 3: transfers, preferences, bookmarks** (D1, D2, E1, E6, B10, A6, A8)
+
+  Done, proved by 125 unit tests, by the scenarios `preferences`, `bookmarks` and `locale` (which also ran locally) and, with a server in a container, by `ftp` and `sftp` on CI:
+  - [x] Speed and time left of a transfer: the status of a running transfer already read "1 MB of 5 MB (20%, 500 KB/sec, 8 seconds remaining)" because the core builds that text. The row in 6.12 was wrong. The scenario `sftp` now requires it (`/sec` and `%`) and prints it.
+  - [x] Speed limits: the Transfers tab of the preferences has "Limit download speed" and "Limit upload speed" (unlimited, 50, 100, 250, 500 KB/s, 1, 2, 5, 10 MB/s). They are stored in `queue.download.bandwidth.bytes` and `queue.upload.bandwidth.bytes` and apply to transfers that start afterwards.
+  - [x] Language: the General tab lists the languages that have translations in their own names (`Languages`) with "System default" first. The choice (`linux.language`) beats the language of the session and is read at startup, so it needs a restart; the tab says so. The scenario `locale` starts with `LANGUAGE=de` and `linux.language=fr` and requires French.
+  - [x] Log: the General tab has the log level (errors, warnings, information, debug) which applies at once, and a button that shows the folder with the log file. View > Show Log (Ctrl+Shift+L) shows a drawer above the status line with what was sent to the server and what it answered ("> USER", "< 230 ..."). The scenario `ftp` requires the commands in it and requires that the password line is not.
+  - [x] Bookmarks: Duplicate (menu "More" and the right mouse button), Sort By name, server or protocol (kept in `linux.bookmarks.sort`; unset means the saved order), and the right mouse button menu of the list.
+  - [x] Import of bookmarks: "Import from FileZilla…" (`~/.config/filezilla/sitemanager.xml`, else the file is asked for) and "Import from SSH Config…" (`~/.ssh/config`; the hosts that are not patterns, with HostName, User, Port and IdentityFile). Servers that are bookmarks already (same protocol, server, port and user) are skipped, and the status line says how many were added. The scenario `bookmarks` imports a file twice and requires one new bookmark.
+  - [x] Core change for review: `importer/.../FilezillaBookmarkCollection` reset the port of a server to the default when it read the protocol, which comes after the port in the file of FileZilla, so every port that is not the default was lost. It keeps the port now. `importer` is a new dependency of the `linux` module.
   - [ ] Result of the CI run.
 
 ---

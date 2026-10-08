@@ -50,11 +50,19 @@ smoke '^SMOKE OK list 3$' list "$work/list"
 smoke '^SMOKE OK locale refresh=Refresh$' locale "$work/list"
 LANGUAGE=de smoke '^SMOKE OK locale refresh=Aktualisieren$' locale "$work/list"
 LANGUAGE=xx:fr:de smoke '^SMOKE OK locale refresh=Actualiser$' locale "$work/list"
+# The language chosen in the preferences wins over the session
+mkdir -p "$work/home-lang/.duck"
+printf 'factory.passwordstore.class=ch.cyberduck.core.UnsecureHostPasswordStore\nlinux.language=fr\n' > "$work/home-lang/.duck/cyberduck.properties"
+HOME="$work/home-lang" LANGUAGE=de smoke '^SMOKE OK locale refresh=Actualiser$' locale "$work/list"
 
 # A change in the preferences window is saved at once and the next start shows it
 smoke '^SMOKE OK preferences$' preferences
 grep -qx 'connection.timeout.seconds=45' "$HOME/.duck/cyberduck.properties" || fail "preferences: the timeout was not saved to cyberduck.properties"
 grep -qx 'connection.retry=2' "$HOME/.duck/cyberduck.properties" || fail "preferences: the retries were not saved to cyberduck.properties"
+grep -qx 'queue.download.bandwidth.bytes=256000' "$HOME/.duck/cyberduck.properties" || fail "preferences: the download limit was not saved"
+grep -qx 'queue.upload.bandwidth.bytes=1048576' "$HOME/.duck/cyberduck.properties" || fail "preferences: the upload limit was not saved"
+grep -qx 'logging=WARN' "$HOME/.duck/cyberduck.properties" || fail "preferences: the log level was not saved"
+! grep -q 'linux.language' "$HOME/.duck/cyberduck.properties" || fail "preferences: the system default language was saved as a choice"
 smoke '^SMOKE OK preferences-check timeout=45$' preferences-check
 
 # The scenarios that start transfers have a home of their own, because a finished transfer stays in the list of
