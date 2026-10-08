@@ -173,6 +173,7 @@ public class BrowserController extends FxController {
     private final Button forward = new Button();
     private final TextField quick = new TextField();
     private final TextField search = new TextField();
+    private final javafx.scene.control.ListView<String> logView = new javafx.scene.control.ListView<>();
     private final javafx.collections.transformation.FilteredList<Path> filtered = new javafx.collections.transformation.FilteredList<>(rows, p -> true);
     private final Button up = new Button();
     private final Button refresh = new Button(Messages.get("Refresh"));
@@ -389,7 +390,18 @@ public class BrowserController extends FxController {
         root.setCenter(table);
         root.setLeft(bookmarks.getPane());
         root.setTop(new VBox(this.menu(), top));
-        root.setBottom(bottom);
+        // The log of the connection sits above the status line when it is shown
+        logView.setItems(this.getTranscriptLines());
+        logView.setPrefHeight(150);
+        logView.setFixedCellSize(18);
+        this.getTranscriptLines().addListener((javafx.collections.ListChangeListener<String>) change -> {
+            if(logView.isVisible() && !logView.getItems().isEmpty()) {
+                logView.scrollTo(logView.getItems().size() - 1);
+            }
+        });
+        logView.setVisible(false);
+        logView.setManaged(false);
+        root.setBottom(new VBox(logView, bottom));
         this.updateNavigation();
         return root;
     }
@@ -620,6 +632,12 @@ public class BrowserController extends FxController {
                 this.render(rendered);
             }
         });
+        final CheckMenuItem showLog = new CheckMenuItem(Messages.get("Show Log"));
+        showLog.setAccelerator(KeyCombination.keyCombination("Shortcut+Shift+L"));
+        showLog.setOnAction(event -> {
+            logView.setVisible(showLog.isSelected());
+            logView.setManaged(showLog.isSelected());
+        });
         final MenuItem refreshItem = this.item(Messages.get("Refresh"), this::reload);
         refreshItem.setAccelerator(KeyCombination.keyCombination("Shortcut+R"));
         refreshItem.disableProperty().bind(refresh.disableProperty());
@@ -646,7 +664,7 @@ public class BrowserController extends FxController {
         menu = new MenuBar(
             new Menu(Messages.get("File"), null, newBrowser, open, quickItem, disconnect, new SeparatorMenuItem(), newFolderItem, newFileItem, new SeparatorMenuItem(), downloadToItem, downloadAsItem, new SeparatorMenuItem(), openWeb, terminalItem, new SeparatorMenuItem(), edit, compareItem, duplicate, synchronize, new SeparatorMenuItem(), createVault, lockVault, new SeparatorMenuItem(), info, preferencesItem, new SeparatorMenuItem(), closeWindow, quit),
             new Menu(Messages.get("Edit"), null, cutItem, copyItem, pasteItem, new SeparatorMenuItem(), copyUrlItem, selectAll),
-            new Menu(Messages.get("View"), null, hidden, refreshItem, findItem),
+            new Menu(Messages.get("View"), null, hidden, showLog, refreshItem, findItem),
             new Menu(Messages.get("Go"), null, backItem, forwardItem, upItem, goTo),
             new Menu(Messages.get("Window"), null, showTransfers),
             new Menu(Messages.get("Help"), null,
@@ -935,6 +953,10 @@ public class BrowserController extends FxController {
 
     public Stage getStage() {
         return stage;
+    }
+
+    javafx.scene.control.ListView<String> getLogView() {
+        return logView;
     }
 
     Button getForwardButton() {

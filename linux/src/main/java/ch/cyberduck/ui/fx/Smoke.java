@@ -346,6 +346,9 @@ public final class Smoke {
         await("third transfer listed", () -> onFx(() -> 3 == transfers.getTable().getItems().size()));
         final Transfer slow = onFx(() -> transfers.getTable().getItems().get(2));
         await("third transfer running", () -> onFx(() -> slow.isRunning() && transfers.fraction(slow) > 0.05d));
+        // The status of a running transfer has the size, the percentage, the speed and the time that is left
+        await("speed shown", () -> onFx(() -> transfers.status(slow).contains("/sec") && transfers.status(slow).contains("%")));
+        System.out.printf("Status of a running transfer: %s%n", onFx(() -> transfers.status(slow)));
         onFx(() -> {
             transfers.getTable().getSelectionModel().clearSelection();
             transfers.getTable().getSelectionModel().select(slow);
@@ -1039,6 +1042,41 @@ public final class Smoke {
         await("name saved", () -> new String(java.nio.file.Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8).contains("Renamed"));
         check("same bookmark", bookmark.getUuid().equals(onFx(() -> controller.getList().getItems().get(0).getUuid())));
 
+        // Duplicate: a copy with a name and an identity of its own
+        onFx(() -> {
+            controller.getList().getSelectionModel().select(bookmark);
+            controller.duplicate();
+            return null;
+        });
+        await("copy listed", () -> onFx(() -> 2 == controller.getList().getItems().size()));
+        final Host copy = onFx(() -> controller.getList().getItems().stream().filter(h -> !h.getUuid().equals(bookmark.getUuid())).findFirst().orElseThrow());
+        check("copy is named after the original", "Renamed copy".equals(copy.getNickname()));
+        await("copy file written", () -> java.nio.file.Files.exists(folder.resolve(String.format("%s.duck", copy.getUuid()))));
+
+        // Import: hosts of an ssh configuration become bookmarks once
+        final java.nio.file.Path config = java.nio.file.Files.createTempFile("ssh-config", "");
+        java.nio.file.Files.write(config, "Host Aardvark\n    HostName 127.0.0.1\n    User tester\n    Port 2200\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        final List<Host> found = BookmarkImport.sshConfig(ch.cyberduck.core.LocalFactory.get(config.toString()), ProtocolFactory.get());
+        check("one host in the configuration", 1 == found.size());
+        check("imported once", 1 == onFx(() -> controller.importHosts(found)));
+        check("not imported twice", 0 == onFx(() -> controller.importHosts(BookmarkImport.sshConfigHosts(config))));
+        await("imported listed", () -> onFx(() -> 3 == controller.getList().getItems().size()));
+        final List<String> unsorted = onFx(() -> controller.getList().getItems().stream().map(Host::getNickname).collect(Collectors.toList()));
+        check("the order is the saved order: " + unsorted, "Aardvark".equals(unsorted.get(unsorted.size() - 1)));
+        // Sort by name puts it first, and the choice is kept
+        onFx(() -> {
+            controller.sort("nickname");
+            return null;
+        });
+        check("sorted by name", "Aardvark".equals(onFx(() -> controller.getList().getItems().get(0).getNickname())));
+        check("the sort order is saved", "nickname".equals(ch.cyberduck.core.preferences.PreferencesFactory.get().getProperty(BookmarkController.SORT)));
+        ch.cyberduck.core.preferences.PreferencesFactory.get().deleteProperty(BookmarkController.SORT);
+        final Host imported = onFx(() -> controller.getList().getItems().get(0));
+        check("imported server", "127.0.0.1".equals(imported.getHostname()) && 2200 == imported.getPort() && "tester".equals(imported.getCredentials().getUsername()));
+        ch.cyberduck.core.BookmarkCollection.defaultCollection().remove(copy);
+        ch.cyberduck.core.BookmarkCollection.defaultCollection().remove(imported);
+        await("extra bookmarks removed", () -> onFx(() -> 1 == controller.getList().getItems().size()));
+
         hold();
 
         // Delete after confirmation
@@ -1322,6 +1360,14 @@ public final class Smoke {
         onFx(() -> {
             window.getTimeout().getValueFactory().setValue(45);
             window.getRetries().getValueFactory().setValue(2);
+            // Speed limits, the level of the log and the language
+            window.getDownloadSpeed().getSelectionModel().select(3);
+            window.getUploadSpeed().getSelectionModel().select(5);
+            window.getLogLevel().getSelectionModel().select(1);
+            check("languages are offered", window.getLanguage().getItems().size() > 2);
+            window.getLanguage().getSelectionModel().select(1);
+            check("a language is saved", !window.getLanguage().getValue().getValue().isEmpty());
+            window.getLanguage().getSelectionModel().select(0);
             window.getStage().close();
             return null;
         });
@@ -1813,6 +1859,14 @@ public final class Smoke {
             return null;
         });
         awaitAnswering("listing after connecting", password, counts, () -> onFx(() -> null != browser.getRendered()));
+
+        // The log shows what was sent to the server and what it answered. The password is not in it.
+        menu(browser, "View", "Show Log");
+        check("the log is shown", onFx(() -> browser.getLogView().isVisible()));
+        await("commands in the log", () -> onFx(() -> browser.getLogView().getItems().stream().anyMatch(l -> l.startsWith("> USER")) &&
+            browser.getLogView().getItems().stream().anyMatch(l -> l.startsWith("< 230"))));
+        check("the password is not in the log", onFx(() -> browser.getLogView().getItems().stream().noneMatch(l -> l.equals("> PASS " + password))));
+        menu(browser, "View", "Show Log");
 
         final int completed = transfers.getCompleted();
         onFx(() -> {

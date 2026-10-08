@@ -18,6 +18,7 @@ package ch.cyberduck.ui.fx;
 import ch.cyberduck.core.AbstractController;
 import ch.cyberduck.core.threading.MainAction;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,10 +94,25 @@ public class FxController extends AbstractController {
         this.later(() -> this.message.set(message));
     }
 
+    private final javafx.collections.ObservableList<String> lines = javafx.collections.FXCollections.observableArrayList();
+
+    /**
+     * What was sent to the server and what it answered, oldest first, for the log of the connection
+     */
+    public javafx.collections.ObservableList<String> getTranscriptLines() {
+        return lines;
+    }
+
     @Override
     public void log(final Type request, final String message) {
         super.log(request, message);
-        this.later(() -> this.transcript.set(message));
+        this.later(() -> {
+            this.transcript.set(message);
+            lines.add(String.format("%s %s", Type.request == request ? ">" : "<", StringUtils.stripEnd(message, "\r\n")));
+            if(lines.size() > 5000) {
+                lines.remove(0, lines.size() - 5000);
+            }
+        });
     }
 
     private void later(final Runnable action) {
