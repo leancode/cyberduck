@@ -231,7 +231,7 @@ public class BrowserController extends FxController {
     public BrowserController(final Stage stage) {
         this.stage = stage;
         this.stage.setTitle(preferences.getProperty("application.name"));
-        this.stage.setScene(new Scene(this.build(), 900, 600));
+        this.stage.setScene(new Scene(this.build(), 1100, 650));
         // Files that are dragged out of the window are downloaded from the moment they leave it
         this.stage.getScene().setOnDragExited(event -> this.startPendingDrag());
     }

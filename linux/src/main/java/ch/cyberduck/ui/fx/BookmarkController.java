@@ -143,7 +143,11 @@ public class BookmarkController {
         deleteItem.setOnAction(event -> this.delete());
         menu.getItems().setAll(connectItem, editItem, copyItem, new SeparatorMenuItem(), deleteItem);
         list.setContextMenu(menu);
-        final HBox buttons = new HBox(6, add, edit, delete, more);
+        // The buttons keep their text and go to a second line when the list is narrow
+        for(javafx.scene.layout.Region button : new javafx.scene.layout.Region[]{add, edit, delete, more}) {
+            button.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
+        }
+        final javafx.scene.layout.FlowPane buttons = new javafx.scene.layout.FlowPane(6, 6, add, edit, delete, more);
         buttons.setPadding(new Insets(6));
         pane.setCenter(list);
         pane.setBottom(buttons);

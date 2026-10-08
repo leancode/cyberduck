@@ -63,6 +63,7 @@ grep -qx 'queue.download.bandwidth.bytes=256000' "$HOME/.duck/cyberduck.properti
 grep -qx 'queue.upload.bandwidth.bytes=1048576' "$HOME/.duck/cyberduck.properties" || fail "preferences: the upload limit was not saved"
 grep -qx 'logging=WARN' "$HOME/.duck/cyberduck.properties" || fail "preferences: the log level was not saved"
 ! grep -q 'linux.language' "$HOME/.duck/cyberduck.properties" || fail "preferences: the system default language was saved as a choice"
+! grep -q 'linux.theme' "$HOME/.duck/cyberduck.properties" || fail "preferences: the choice of the system for the theme was saved as a choice"
 smoke '^SMOKE OK preferences-check timeout=45$' preferences-check
 
 # The scenarios that start transfers have a home of their own, because a finished transfer stays in the list of

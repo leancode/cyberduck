@@ -158,4 +158,35 @@ public class ConnectionDialogTest {
             return null;
         });
     }
+
+    @Test
+    public void testSavePasswordOnlyWithAPassword() throws Exception {
+        onFx(() -> {
+            final ConnectionDialog dialog = new ConnectionDialog(null, ProtocolFactory.get());
+            dialog.getProtocolBox().setValue(sftp);
+            dialog.getServerField().setText("example.net");
+            dialog.getUsernameField().setText("alice");
+            // Nothing to save without a password
+            assertTrue(dialog.getSavePasswordBox().isDisabled());
+            dialog.getSavePasswordBox().setSelected(true);
+            dialog.getConnectButton().fire();
+            assertFalse(dialog.getResult().getCredentials().isSaved());
+            return null;
+        });
+        onFx(() -> {
+            final ConnectionDialog dialog = new ConnectionDialog(null, ProtocolFactory.get());
+            dialog.getProtocolBox().setValue(sftp);
+            dialog.getServerField().setText("example.net");
+            dialog.getUsernameField().setText("alice");
+            dialog.getPasswordField().setText("secret");
+            assertFalse(dialog.getSavePasswordBox().isDisabled());
+            assertFalse(dialog.getSavePasswordBox().isSelected());
+            dialog.getConnectButton().fire();
+            assertFalse(dialog.getResult().getCredentials().isSaved());
+            dialog.getSavePasswordBox().setSelected(true);
+            dialog.getConnectButton().fire();
+            assertTrue(dialog.getResult().getCredentials().isSaved());
+            return null;
+        });
+    }
 }

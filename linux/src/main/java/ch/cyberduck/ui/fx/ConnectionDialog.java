@@ -64,6 +64,7 @@ public class ConnectionDialog extends Dialog<Host> {
     private final TextField port = new TextField();
     private final TextField username = new TextField();
     private final PasswordField password = new PasswordField();
+    private final CheckBox savePassword = new CheckBox(Messages.get("Save password in the keyring"));
     private final TextField path = new TextField();
     private final TextField privateKey = new TextField();
     private final Button chooseKey = new Button(Messages.get("Choose…"));
@@ -116,6 +117,8 @@ public class ConnectionDialog extends Dialog<Host> {
                 host = HostBuilder.fromFields(protocols, protocol.getValue(), server.getText(), port.getText(),
                     username.getText(), password.getText(), path.getText());
                 HostBuilder.identity(host, privateKey.getText());
+                // Stored in the keyring once the login worked
+                host.getCredentials().setSaved(!bookmark && savePassword.isSelected() && StringUtils.isNotEmpty(password.getText()));
                 HostBuilder.options(host, anonymous.isSelected(), encoding.getValue(), connectMode.getValue(),
                     null == transferMode.getValue() ? null : transferMode.getValue().getValue());
                 if(bookmark) {
@@ -218,6 +221,8 @@ public class ConnectionDialog extends Dialog<Host> {
         if(!bookmark) {
             // A bookmark stores no password
             grid.addRow(row++, new Label(Messages.get("Password")), password);
+            savePassword.disableProperty().bind(password.textProperty().isEmpty().or(password.disableProperty()));
+            grid.add(savePassword, 1, row++);
         }
         grid.add(anonymous, 1, row++);
         privateKey.setPromptText(Messages.get("Optional, instead of the password"));
@@ -333,6 +338,10 @@ public class ConnectionDialog extends Dialog<Host> {
 
     TextField getUsernameField() {
         return username;
+    }
+
+    CheckBox getSavePasswordBox() {
+        return savePassword;
     }
 
     PasswordField getPasswordField() {

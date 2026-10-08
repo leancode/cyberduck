@@ -107,6 +107,7 @@ public final class PreferencesController {
     private final ComboBox<Choice> uploadAction = new ComboBox<>();
     private final ComboBox<Choice> transferType = new ComboBox<>();
     private final ComboBox<Choice> language = new ComboBox<>();
+    private final ComboBox<Choice> theme = new ComboBox<>();
     private final ComboBox<Choice> logLevel = new ComboBox<>();
     private final ComboBox<Choice> uploadSpeed = new ComboBox<>();
     private final ComboBox<Choice> downloadSpeed = new ComboBox<>();
@@ -220,6 +221,14 @@ public final class PreferencesController {
         });
         grid.addRow(2, new Label(Messages.get("Default Protocol")), protocol);
         GridPane.setHgrow(grid.getChildren().get(1), Priority.ALWAYS);
+
+        // Light or dark windows at once
+        this.choose(theme, List.of(
+            new Choice("", Messages.get("As the system")),
+            new Choice("light", Messages.get("Light")),
+            new Choice("dark", Messages.get("Dark"))), Theme.PROPERTY, "");
+        theme.valueProperty().addListener((observable, previous, selected) -> Theme.refresh());
+        grid.addRow(5, new Label(Messages.get("Appearance")), theme);
 
         // The language is read when the program starts
         final List<Choice> languages = new ArrayList<>();
@@ -542,6 +551,10 @@ public final class PreferencesController {
 
     ComboBox<Protocol> getProtocol() {
         return protocol;
+    }
+
+    ComboBox<Choice> getTheme() {
+        return theme;
     }
 
     ComboBox<Choice> getLanguage() {
