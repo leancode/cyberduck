@@ -1502,6 +1502,11 @@ the module are 108 (1 skipped without a keyring) and every scenario named below 
 
   The commits of `main` were authored and committed as `Claude <noreply@anthropic.com>`, and 66 of them ended with a `Claude-Session:` link, against the rule of the owner and of `AGENTS.md` ("Commits and pull requests are attributed to their human author"). The 69 commits that are not in `master` were rewritten on the owner's order, as `Dom <leancode@users.noreply.github.com>` without the link, and `main` was force-pushed. The content of every file is the same (checked with a diff of the old and the new tip). No attribution of a tool goes into commits, pull requests, releases or files.
 
+- [x] **7.5 Owner test of the first release, quick connect and dark theme** (2026-10-08)
+
+  - [x] Quick Connect is two things now. The owner took the field "Quick Connect" for a button and the empty box before it for the field to type in. That box is the path of the folder that is shown, and it is off until a connection is open. The path field now says "Path", the Quick Connect field says "Server or URL" and has a button with an arrow next to it, which does what Return does and is off while the field is empty. The scenario `sftp` connects once with Return and once with the button.
+  - [x] The dark theme was shaded from light to dark in the menu bar, the buttons and the column headers, which made the text harder to read; the light theme is flat. The dark style sets the colours of the controls flat (`-fx-body-color`, `-fx-inner-border`).
+
 - [ ] **7.2 First release**
 
   After the Yes items of 6.12 are done and tested again on a desktop: a pre-release tag such as `v9.6.0-linux.1` (upstream version plus the Linux build). It is the first real run of the release workflow (4.6). Until upstream agrees on the name, the packages are described as a community build, "Cyberduck for Linux (unofficial)", because "Cyberduck" is a trademark of iterate GmbH.

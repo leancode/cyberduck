@@ -172,6 +172,7 @@ public class BrowserController extends FxController {
     private final Button back = new Button();
     private final Button forward = new Button();
     private final TextField quick = new TextField();
+    private final Button quickGo = new Button();
     private final TextField search = new TextField();
     private final javafx.scene.control.ListView<String> logView = new javafx.scene.control.ListView<>();
     private final javafx.collections.transformation.FilteredList<Path> filtered = new javafx.collections.transformation.FilteredList<>(rows, p -> true);
@@ -261,7 +262,7 @@ public class BrowserController extends FxController {
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         location.setOnAction(event -> this.go(location.getText()));
         HBox.setHgrow(location, Priority.ALWAYS);
-        final HBox top = new HBox(8, bookmarksToggle, connect, back, forward, up, refresh, download, upload, newFolder, delete, transfers, location, quick, search);
+        final HBox top = new HBox(8, bookmarksToggle, connect, back, forward, up, refresh, download, upload, newFolder, delete, transfers, location, quick, quickGo, search);
         top.setPadding(new Insets(8));
         top.setAlignment(Pos.CENTER_LEFT);
         // Never cut the labels of the buttons. The path field gives way instead and the window cannot get narrower than the toolbar.
@@ -281,10 +282,20 @@ public class BrowserController extends FxController {
         forward.setGraphic(Icons.forward());
         forward.setTooltip(new Tooltip(Messages.get("Forward")));
         forward.setAccessibleText(Messages.get("Forward"));
-        quick.setPromptText(Messages.get("Quick Connect"));
-        quick.setPrefWidth(120);
-        quick.setMinWidth(60);
+        // Two boxes sit next to each other: the folder that is shown, and a place to type a server to connect to
+        location.setPromptText(Messages.get("Path"));
+        quick.setPromptText(Messages.get("Server or URL"));
+        quick.setPrefWidth(130);
+        quick.setMinWidth(70);
         quick.setOnAction(event -> this.quickConnect(quick.getText()));
+        final String quickHelp = Messages.get("Quick Connect: type a server or a URL such as sftp://user@example.net and press Return");
+        quick.setTooltip(new Tooltip(quickHelp));
+        quickGo.setGraphic(Icons.forward());
+        quickGo.setTooltip(new Tooltip(Messages.get("Quick Connect")));
+        quickGo.setAccessibleText(Messages.get("Quick Connect"));
+        quickGo.setMinWidth(Region.USE_PREF_SIZE);
+        quickGo.disableProperty().bind(quick.textProperty().isEmpty());
+        quickGo.setOnAction(event -> this.quickConnect(quick.getText()));
         search.setPromptText(Messages.get("Search"));
         search.setPrefWidth(110);
         search.setMinWidth(60);
@@ -976,6 +987,10 @@ public class BrowserController extends FxController {
 
     Button getForwardButton() {
         return forward;
+    }
+
+    Button getQuickGo() {
+        return quickGo;
     }
 
     TextField getQuick() {

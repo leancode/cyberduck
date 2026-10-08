@@ -804,6 +804,21 @@ public final class Smoke {
         check("quick connect clears the field", onFx(() -> browser.getQuick().getText().isEmpty()));
         menu(browser, "Disconnect");
         await("disconnected after quick connect", () -> onFx(() -> !browser.isMounted()));
+        // The button next to the field does the same as Return, and is off while the field is empty
+        check("the quick connect button is off without text", onFx(() -> browser.getQuickGo().isDisabled()));
+        onFx(() -> {
+            browser.getQuick().setText(String.format("sftp://%s@%s:%s/upload", user, host, port));
+            return null;
+        });
+        check("the quick connect button is on with text", onFx(() -> !browser.getQuickGo().isDisabled()));
+        onFx(() -> {
+            browser.getQuickGo().fire();
+            return null;
+        });
+        awaitAnswering("quick connect with the button", password, counts, () -> onFx(() -> null != browser.getRendered()));
+        check("the button connects to the folder of the URL", onFx(() -> "/upload".equals(browser.getRendered().getAbsolute())));
+        menu(browser, "Disconnect");
+        await("disconnected after the button", () -> onFx(() -> !browser.isMounted()));
     }
 
     private static void menu(final BrowserController browser, final String name) throws Exception {

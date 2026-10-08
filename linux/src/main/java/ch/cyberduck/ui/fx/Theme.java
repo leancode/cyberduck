@@ -38,7 +38,9 @@ public final class Theme {
     /**
      * The standard style derives its colors from the base and the background; the lists have a background of their own
      */
-    static final String DARK = "-fx-base: #3c3f41; -fx-background: #2b2b2b; -fx-control-inner-background: #2b2b2b; -fx-control-inner-background-alt: #303234;";
+    static final String DARK = "-fx-base: #3c3f41; -fx-background: #2b2b2b; -fx-control-inner-background: #2b2b2b; -fx-control-inner-background-alt: #303234;"
+        // Flat, like the light windows: the standard style shades the menu bar, the buttons and the column headers from light to dark
+        + " -fx-body-color: -fx-color; -fx-inner-border: -fx-color; -fx-shadow-highlight-color: transparent;";
 
     /**
      * The hints of the text fields would be darker than their background otherwise
